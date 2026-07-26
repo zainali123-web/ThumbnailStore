@@ -24,3 +24,4 @@ jobs:
         run: python main.py
         env:
           SELL_API_KEY: ${{ secrets.SELL_API_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
