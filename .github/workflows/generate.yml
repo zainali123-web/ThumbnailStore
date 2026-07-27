@@ -23,5 +23,5 @@ jobs:
       - name: Run script
         run: python main.py
         env:
-          SELL_API_KEY: ${{ secrets.SELL_API_KEY }}
+          SELL_API_KEY: ${{ secrets.SELLAPP_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
