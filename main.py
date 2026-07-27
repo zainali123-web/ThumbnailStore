@@ -14,17 +14,26 @@ if not SELL_API_KEY:
     print("Error: Sell.app API Key is missing in GitHub Secrets!")
     sys.exit(1)
 
-# 2. Topic Pick karna
+# 2. Topic Pick karna aur Dictionary handle karna
 print("Picking a topic...")
 try:
     with open("topics_database.json", "r") as f:
         topics_data = json.load(f)
         topics = topics_data.get("topics", ["DEFAULT TOPIC"])
 except Exception as e:
-    topics = ["THE BIGGEST UPGRADE", "BEFORE VS AFTER", "LEVEL UP YOUR SKILLS"]
+    topics = [{"headline": "THE BIGGEST UPGRADE", "keyword": "upgrade"}]
 
-topic = random.choice(topics)
-print(f"Topic: {topic}")
+selected_topic = random.choice(topics)
+
+# Agar topic dictionary hai toh usme se headline aur keyword nikalna
+if isinstance(selected_topic, dict):
+    topic_text = selected_topic.get("headline", "DEFAULT TOPIC")
+    search_query = selected_topic.get("keyword", topic_text)
+else:
+    topic_text = str(selected_topic)
+    search_query = topic_text
+
+print(f"Topic: {topic_text}")
 
 # 3. Stock Photo Download karna (Pexels)
 print("Downloading stock photo...")
@@ -32,7 +41,7 @@ photo_path = "temp_image.jpg"
 if PEXELS_API_KEY:
     headers = {"Authorization": PEXELS_API_KEY}
     response = requests.get(
-        f"https://api.pexels.com/v1/search?query={topic}&per_page=1",
+        f"https://api.pexels.com/v1/search?query={search_query}&per_page=1",
         headers=headers
     )
     if response.status_code == 200:
@@ -60,7 +69,7 @@ try:
 except IOError:
     font = ImageFont.load_default()
 
-draw.text((50, 50), topic, fill=(255, 255, 255), font=font)
+draw.text((50, 50), topic_text, fill=(255, 255, 255), font=font)
 base_img.save(output_thumbnail)
 
 # 5. Sell.app par Upload karna
@@ -73,10 +82,9 @@ headers = {
     "Accept": "application/json"
 }
 
-# Yahan type ko "file" aur visibility add kar di hai
 payload = {
-    "title": f"Thumbnail - {topic}",
-    "description": f"High quality automated generated thumbnail for: {topic}",
+    "title": f"Thumbnail - {topic_text}",
+    "description": f"High quality automated generated thumbnail for: {topic_text}",
     "price": 5.00,
     "currency": "USD",
     "type": "file",
