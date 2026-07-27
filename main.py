@@ -69,45 +69,4 @@ base_img = Image.open(photo_path).resize((1280, 720))
 # Text overlay effect
 draw = ImageDraw.Draw(base_img)
 try:
-    font = ImageFont.truetype("arial.ttf", 80)
-except IOError:
-    font = ImageFont.load_default()
-
-draw.text((50, 50), topic_text, fill=(255, 255, 255), font=font)
-base_img.save(output_thumbnail)
-
-# 5. Sell.app par Upload karna (Store ID ke sath)
-print("Uploading to Sell.app...")
-sell_url = f"https://api.sell.app/v1/shops/{SELLAPP_STORE_ID}/products"
-
-headers = {
-    "Authorization": f"Bearer {SELL_API_KEY}",
-    "Content-Type": "application/json",
-    "Accept": "application/json"
-}
-
-payload = {
-    "title": f"Thumbnail - {topic_text}",
-    "description": f"High quality automated generated thumbnail for: {topic_text}",
-    "price": 5.00,
-    "currency": "USD",
-    "type": "file",
-    "visibility": "visible"
-}
-
-try:
-    response = requests.post(sell_url, headers=headers, json=payload)
-    print(f"Sell.app Response Code: {response.status_code}")
-    print(f"Sell.app Response: {response.text}")
-    
-    response.raise_for_status()
-    print("Product uploaded successfully to Sell.app!")
-    
-except requests.exceptions.HTTPError as err:
-    print(f"Sell.app product creation failed: {err}")
-    sys.exit(1)
-except Exception as e:
-    print(f"An unexpected error occurred: {e}")
-    sys.exit(1)
-
-print("Done.")
+    font = ImageFont.
