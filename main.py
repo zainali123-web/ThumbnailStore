@@ -14,6 +14,10 @@ if not SELL_API_KEY:
     print("Error: Sell.app API Key is missing in GitHub Secrets!")
     sys.exit(1)
 
+if not SELLAPP_STORE_ID:
+    print("Error: Sell.app Store ID is missing in GitHub Secrets!")
+    sys.exit(1)
+
 # 2. Topic Pick karna aur Dictionary handle karna
 print("Picking a topic...")
 try:
@@ -72,9 +76,9 @@ except IOError:
 draw.text((50, 50), topic_text, fill=(255, 255, 255), font=font)
 base_img.save(output_thumbnail)
 
-# 5. Sell.app par Upload karna
+# 5. Sell.app par Upload karna (Store ID ke sath)
 print("Uploading to Sell.app...")
-sell_url = "https://api.sell.app/v1/products"
+sell_url = f"https://api.sell.app/v1/shops/{SELLAPP_STORE_ID}/products"
 
 headers = {
     "Authorization": f"Bearer {SELL_API_KEY}",
