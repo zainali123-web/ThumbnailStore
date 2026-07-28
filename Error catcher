@@ -1,0 +1,45 @@
+import os
+import requests
+
+# GitHub Secrets se API key uthana
+SELL_API_KEY = os.environ.get("SELL_API_KEY")
+
+def upload_product_to_sellapp():
+    # Sell.app API endpoint for creating products
+    url = "https://api.sell.app/v2/products"
+    
+    headers = {
+        "Authorization": f"Bearer {SELL_API_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+    
+    # Product data payload
+    payload = {
+        "name": "Aapke Product Ka Naam",
+        "description": "Product ki tafseel yahan aayegi",
+        "price": 10.00,
+        "currency": "USD"
+    }
+
+    print("Sending request to Sell.app...")
+    
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        
+        # Print status and response for debugging in GitHub Actions logs
+        print(f"Status Code: {response.status_code}")
+        print(f"Response Text: {response.text}")
+
+        # Check if the product was successfully created (200 OK or 201 Created)
+        if response.status_code in [200, 201]:
+            print("Product successfully uploaded to Sell.app!")
+        else:
+            # If Sell.app rejects it, raise an exception so GitHub Action fails (turns Red)
+            raise Exception(f"Sell.app API rejected the request. Details: {response.text}")
+
+    except requests.exceptions.RequestException as e:
+        raise Exception(f"Network or Connection Error occurred: {str(e)}")
+
+if __name__ == "__main__":
+    upload_product_to_sellapp()
