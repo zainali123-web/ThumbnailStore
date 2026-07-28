@@ -144,13 +144,12 @@ def create_sellapp_product(title, description, price, image_path):
     }
 
     payload = {
-        "store_id": SELLAPP_STORE_ID,
         "title": title,
         "description": description,
-        "price": price,
+        "price": float(price),
         "currency": "USD",
-        "type": "digital",
-        "visibility": "visible"
+        "type": 1,           # 1 = Digital / Serialized Product in Sell.app v2
+        "visibility": 0      # 0 = Public / Visible in Sell.app v2
     }
 
     response = requests.post(url, headers=headers, json=payload)
