@@ -128,9 +128,8 @@ def create_thumbnail(background_path, headline, accent_hex, output_path):
 
     img.convert("RGB").save(output_path, quality=95)
     return output_path
-
-
-# ---------------- STEP 4: Upload product to Sell.app ---------
+   
+# ---------------- STEP 4: Upload product to Sell.app ----------------
 def create_sellapp_product(title, description, price, image_path):
     """
     Creates a product listing on Sell.app via their API.
@@ -160,7 +159,6 @@ def create_sellapp_product(title, description, price, image_path):
     product = response.json()
     print(f"Product created on Sell.app: {title}")
     return product
-
 # ---------------- Run counter (tracks bundling every 3 runs) ----------------
 def get_and_increment_run_count():
     count = 0
