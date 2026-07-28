@@ -130,18 +130,16 @@ def create_thumbnail(background_path, headline, accent_hex, output_path):
     return output_path
 
 
-# ---------------- STEP 4: Upload product to Sell.app ----------------
+# ---------------- STEP 4: Upload product to Sell.app ---------
 def create_sellapp_product(title, description, price, image_path):
     """
     Creates a product listing on Sell.app via their API.
-    NOTE: Exact endpoint/field names should be verified against Sell.app's
-    current API docs (docs.sell.app) before relying on this in production -
-    test with real API credentials first, since API details can change.
     """
-    url = "https://sell.app/api/v2/products"
+    url = "https://api.sell.app/v2/products"
     headers = {
         "Authorization": f"Bearer {SELLAPP_API_KEY}",
         "Content-Type": "application/json",
+        "Accept": "application/json",
     }
 
     payload = {
@@ -149,7 +147,9 @@ def create_sellapp_product(title, description, price, image_path):
         "title": title,
         "description": description,
         "price": price,
-        "type": "SERIALIZED",  # digital product type - adjust per Sell.app docs
+        "currency": "USD",
+        "type": "digital",       # Sell.app ke liye valid product type
+        "visibility": "visible"  # Sell.app ki requirement ke mutabiq visibility
     }
 
     response = requests.post(url, headers=headers, json=payload)
@@ -160,7 +160,6 @@ def create_sellapp_product(title, description, price, image_path):
     product = response.json()
     print(f"Product created on Sell.app: {title}")
     return product
-
 
 # ---------------- Run counter (tracks bundling every 3 runs) ----------------
 def get_and_increment_run_count():
