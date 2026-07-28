@@ -129,7 +129,7 @@ def create_thumbnail(background_path, headline, accent_hex, output_path):
     img.convert("RGB").save(output_path, quality=95)
     return output_path
    
-# ---------------- STEP 4: Upload product to Sell.app ---------------
+# ---------------- STEP 4: Upload product to Sell.app ----------------
 def create_sellapp_product(title, description, price, image_path):
     """
     Creates a product listing on Sell.app via their API.
@@ -138,13 +138,13 @@ def create_sellapp_product(title, description, price, image_path):
     
     headers = {
         "Authorization": f"Bearer {SELLAPP_API_KEY}",
-        "X-STORE": SELLAPP_STORE_ID,  # Targeted store identifier
+        "X-STORE": SELLAPP_STORE_ID,
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
     }
 
     payload = {
+        "store_id": SELLAPP_STORE_ID,
         "title": title,
         "description": description,
         "price": price,
