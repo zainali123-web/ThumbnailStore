@@ -128,29 +128,32 @@ def create_thumbnail(background_path, headline, accent_hex, output_path):
 
     img.convert("RGB").save(output_path, quality=95)
     return output_path
-   
+
+
 # ---------------- STEP 4: Upload product to Sell.app ----------------
 def create_sellapp_product(title, description, price, image_path):
     """
     Creates a product listing on Sell.app via their API.
+    NOTE: Exact endpoint/field names should be verified against Sell.app's
+    current API docs (docs.sell.app) before relying on this in production -
+    test with real API credentials first, since API details can change.
     """
     url = "https://sell.app/api/v2/products"
-    
     headers = {
         "Authorization": f"Bearer {SELLAPP_API_KEY}",
-        "X-STORE": SELLAPP_STORE_ID,
         "Content-Type": "application/json",
-        "Accept": "application/json",
     }
 
     payload = {
+        "store_id": SELLAPP_STORE_ID,
         "title": title,
         "description": description,
-        "price": float(price),
-        "currency": "USD",
-        "type": 1,           # 1 = Digital / Serialized Product in Sell.app v2
-        "visibility": 0      # 0 = Public / Visible in Sell.app v2
+        "price": price,
+        "type": "product",  # confirmed correct value from real Sell.app API data
+        "visibility": "PUBLIC",  # confirmed correct value from real Sell.app API data
     }
+
+    print(f"DEBUG - sending payload: {payload}")
 
     response = requests.post(url, headers=headers, json=payload)
     if response.status_code not in (200, 201):
@@ -160,6 +163,8 @@ def create_sellapp_product(title, description, price, image_path):
     product = response.json()
     print(f"Product created on Sell.app: {title}")
     return product
+
+
 # ---------------- Run counter (tracks bundling every 3 runs) ----------------
 def get_and_increment_run_count():
     count = 0
@@ -187,10 +192,14 @@ def main():
     create_thumbnail(bg_path, topic["headline"], topic["accent_color"], output_path)
 
     print("Uploading to Sell.app...")
-    title = f"YouTube Thumbnail Template - {headline_display.title()}"
+    title = f"YouTube Thumbnail Template | Clickbait Design | {headline_display.title()} | High CTR"
     description = (
-        "Professional, ready-to-use YouTube thumbnail template. "
-        "High-resolution JPG (1280x720), instantly downloadable after purchase."
+        "Professional, ready-to-use YouTube thumbnail template designed for high click-through rate (CTR). "
+        "Perfect for YouTubers, content creators, vloggers, and video editors who want eye-catching, "
+        "clickbait-style thumbnails that stand out in search and suggested feeds. "
+        "High-resolution JPG (1280x720, YouTube-standard size), instantly downloadable after purchase. "
+        "Keywords: youtube thumbnail template, clickbait thumbnail, thumbnail design, content creator template, "
+        "video thumbnail, high CTR thumbnail, youtube graphics."
     )
     create_sellapp_product(title, description, SINGLE_PRICE, output_path)
 
@@ -213,4 +222,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
