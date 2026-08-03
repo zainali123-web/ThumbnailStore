@@ -102,21 +102,6 @@ def create_thumbnail(background_path, headline, accent_hex, output_path):
 
 
 def create_sellapp_product(title, description, price_cents, image_path):
-    """
-    Creates a product on Sell.app WITH an embedded variant, using the
-    exact structure confirmed by querying Sell.app's own API for a
-    real, working, manually-created product+variant:
-      - visibility must be one of: PUBLIC, ON_HOLD, HIDDEN, PRIVATE
-      - type must be: "product" or "bundle"
-      - price is in CENTS, as a value inside pricing.price.price
-      - payment_methods is an array, e.g. ["SOL"] for Solana
-      - deliverable.types e.g. ["DOWNLOADABLE"], with files attached
-
-    NOTE: File upload may require a separate media-upload call depending
-    on Sell.app's current API - if this still errors on "deliverable"
-    or file fields specifically, that confirms the file must be
-    uploaded first via a separate endpoint and referenced by path.
-    """
     url = "https://sell.app/api/v2/products"
     headers = {
         "Authorization": f"Bearer {SELLAPP_API_KEY}",
@@ -131,14 +116,15 @@ def create_sellapp_product(title, description, price_cents, image_path):
         "type": "product",
         "variants": [
             {
-                "title": "Default",
-                "description": "default variant",
+                "title": "Default Variant",
+                "description": "Default digital thumbnail template",
+                "stock": -1,
+                "unlimited_stock": True,
                 "pricing": {
                     "type": "SINGLE_PAYMENT",
                     "humble": False,
                     "price": {"price": str(price_cents), "currency": "USD"},
                 },
-                "payment_methods": ["SOL"],
                 "deliverable": {
                     "types": ["DOWNLOADABLE"],
                 },
