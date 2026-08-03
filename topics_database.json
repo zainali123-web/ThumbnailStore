@@ -1,24 +1,144 @@
 {
   "topics": [
-    {"id": 1, "headline": "I TRIED THIS\nFOR 30 DAYS", "keyword": "person lifestyle challenge", "accent_color": "#FF3B30", "used": false},
-    {"id": 2, "headline": "THE TRUTH\nNOBODY TELLS YOU", "keyword": "person thinking serious", "accent_color": "#FFD60A", "used": false},
-    {"id": 3, "headline": "THIS CHANGED\nEVERYTHING", "keyword": "person shocked amazed", "accent_color": "#FF3B30", "used": false},
-    {"id": 4, "headline": "STOP DOING\nTHIS MISTAKE", "keyword": "person warning stop", "accent_color": "#FFD60A", "used": false},
-    {"id": 5, "headline": "HOW I MADE\nIT WORK", "keyword": "person success celebration", "accent_color": "#30D158", "used": false},
-    {"id": 6, "headline": "YOU WON'T\nBELIEVE THIS", "keyword": "person surprised reaction", "accent_color": "#FF3B30", "used": false},
-    {"id": 7, "headline": "THE REAL\nREASON WHY", "keyword": "person explaining pointing", "accent_color": "#0A84FF", "used": false},
-    {"id": 8, "headline": "BEFORE VS\nAFTER", "keyword": "transformation comparison", "accent_color": "#30D158", "used": false},
-    {"id": 9, "headline": "WHAT I WISH\nI KNEW SOONER", "keyword": "person reflective thoughtful", "accent_color": "#FFD60A", "used": false},
-    {"id": 10, "headline": "IS IT WORTH\nIT? HONEST", "keyword": "person reviewing product", "accent_color": "#0A84FF", "used": false},
-    {"id": 11, "headline": "THIS WENT\nSO WRONG", "keyword": "person disaster mishap", "accent_color": "#FF3B30", "used": false},
-    {"id": 12, "headline": "THE SECRET\nTHEY HIDE", "keyword": "person mysterious secret", "accent_color": "#FFD60A", "used": false},
-    {"id": 13, "headline": "24 HOURS\nCHALLENGE", "keyword": "person clock time challenge", "accent_color": "#30D158", "used": false},
-    {"id": 14, "headline": "I WASN'T\nREADY FOR THIS", "keyword": "person overwhelmed shocked", "accent_color": "#FF3B30", "used": false},
-    {"id": 15, "headline": "FINALLY\nEXPLAINED", "keyword": "person teaching explaining", "accent_color": "#0A84FF", "used": false},
-    {"id": 16, "headline": "THE BIGGEST\nUPGRADE", "keyword": "person improvement growth", "accent_color": "#30D158", "used": false},
-    {"id": 17, "headline": "DON'T MAKE\nTHIS ERROR", "keyword": "person mistake frustrated", "accent_color": "#FFD60A", "used": false},
-    {"id": 18, "headline": "WHAT REALLY\nHAPPENED", "keyword": "person storytelling dramatic", "accent_color": "#0A84FF", "used": false},
-    {"id": 19, "headline": "THIS IS\nGAME CHANGING", "keyword": "person excited discovery", "accent_color": "#FF3B30", "used": false},
-    {"id": 20, "headline": "MY HONEST\nOPINION", "keyword": "person candid talking", "accent_color": "#30D158", "used": false}
+    {
+      "id": 1,
+      "headline": "I TRIED THIS\nFOR 30 DAYS",
+      "keyword": "person lifestyle challenge",
+      "accent_color": "#FF3B30",
+      "used": false
+    },
+    {
+      "id": 2,
+      "headline": "THE TRUTH\nNOBODY TELLS YOU",
+      "keyword": "person thinking serious",
+      "accent_color": "#FFD60A",
+      "used": false
+    },
+    {
+      "id": 3,
+      "headline": "THIS CHANGED\nEVERYTHING",
+      "keyword": "person shocked amazed",
+      "accent_color": "#FF3B30",
+      "used": false
+    },
+    {
+      "id": 4,
+      "headline": "STOP DOING\nTHIS MISTAKE",
+      "keyword": "person warning stop",
+      "accent_color": "#FFD60A",
+      "used": false
+    },
+    {
+      "id": 5,
+      "headline": "HOW I MADE\nIT WORK",
+      "keyword": "person success celebration",
+      "accent_color": "#30D158",
+      "used": false
+    },
+    {
+      "id": 6,
+      "headline": "YOU WON'T\nBELIEVE THIS",
+      "keyword": "person surprised reaction",
+      "accent_color": "#FF3B30",
+      "used": false
+    },
+    {
+      "id": 7,
+      "headline": "THE REAL\nREASON WHY",
+      "keyword": "person explaining pointing",
+      "accent_color": "#0A84FF",
+      "used": true
+    },
+    {
+      "id": 8,
+      "headline": "BEFORE VS\nAFTER",
+      "keyword": "transformation comparison",
+      "accent_color": "#30D158",
+      "used": false
+    },
+    {
+      "id": 9,
+      "headline": "WHAT I WISH\nI KNEW SOONER",
+      "keyword": "person reflective thoughtful",
+      "accent_color": "#FFD60A",
+      "used": false
+    },
+    {
+      "id": 10,
+      "headline": "IS IT WORTH\nIT? HONEST",
+      "keyword": "person reviewing product",
+      "accent_color": "#0A84FF",
+      "used": false
+    },
+    {
+      "id": 11,
+      "headline": "THIS WENT\nSO WRONG",
+      "keyword": "person disaster mishap",
+      "accent_color": "#FF3B30",
+      "used": false
+    },
+    {
+      "id": 12,
+      "headline": "THE SECRET\nTHEY HIDE",
+      "keyword": "person mysterious secret",
+      "accent_color": "#FFD60A",
+      "used": false
+    },
+    {
+      "id": 13,
+      "headline": "24 HOURS\nCHALLENGE",
+      "keyword": "person clock time challenge",
+      "accent_color": "#30D158",
+      "used": false
+    },
+    {
+      "id": 14,
+      "headline": "I WASN'T\nREADY FOR THIS",
+      "keyword": "person overwhelmed shocked",
+      "accent_color": "#FF3B30",
+      "used": false
+    },
+    {
+      "id": 15,
+      "headline": "FINALLY\nEXPLAINED",
+      "keyword": "person teaching explaining",
+      "accent_color": "#0A84FF",
+      "used": false
+    },
+    {
+      "id": 16,
+      "headline": "THE BIGGEST\nUPGRADE",
+      "keyword": "person improvement growth",
+      "accent_color": "#30D158",
+      "used": false
+    },
+    {
+      "id": 17,
+      "headline": "DON'T MAKE\nTHIS ERROR",
+      "keyword": "person mistake frustrated",
+      "accent_color": "#FFD60A",
+      "used": false
+    },
+    {
+      "id": 18,
+      "headline": "WHAT REALLY\nHAPPENED",
+      "keyword": "person storytelling dramatic",
+      "accent_color": "#0A84FF",
+      "used": false
+    },
+    {
+      "id": 19,
+      "headline": "THIS IS\nGAME CHANGING",
+      "keyword": "person excited discovery",
+      "accent_color": "#FF3B30",
+      "used": false
+    },
+    {
+      "id": 20,
+      "headline": "MY HONEST\nOPINION",
+      "keyword": "person candid talking",
+      "accent_color": "#30D158",
+      "used": false
+    }
   ]
 }
