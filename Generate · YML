@@ -1,0 +1,43 @@
+name: Auto Thumbnail Generator
+
+permissions:
+  contents: write
+
+on:
+  schedule:
+    - cron: "0 9 * * *"
+    - cron: "0 14 * * *"
+    - cron: "0 18 * * *"
+    - cron: "0 22 * * *"
+  workflow_dispatch:
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run thumbnail generator
+        env:
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          SELLAPP_API_KEY: ${{ secrets.SELLAPP_API_KEY }}
+          SELLAPP_STORE_ID: ${{ secrets.SELLAPP_STORE_ID }}
+        run: python main.py
+
+      - name: Commit updated tracking files
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add topics_database.json run_counter.json
+          git commit -m "Update topic usage and run count [skip ci]" || echo "Nothing to commit"
+          git pull --rebase origin main
+          git push
