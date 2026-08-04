@@ -2,7 +2,8 @@
 Automated Thumbnail Store Generator (Sell.app)
 ------------------------------------------------------------------
 Generates a professional-style YouTube thumbnail and uploads it
-to Sell.app using a 2-step API process with live console logging.
+to Sell.app in a single JSON API call with full variants, pricing,
+and stock configuration.
 """
 
 import os
@@ -16,8 +17,8 @@ TOPICS_FILE = "topics_database.json"
 RUN_COUNTER_FILE = "run_counter.json"
 OUTPUT_DIR = "output"
 THUMB_SIZE = (1280, 720)
-SINGLE_PRICE_CENTS = 500     # $5.00
-BUNDLE_PRICE_CENTS = 3000    # $30.00
+SINGLE_PRICE_CENTS = 500     # $5.00 (Price in Cents)
+BUNDLE_PRICE_CENTS = 3000    # $30.00 bundle price
 
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 SELLAPP_API_KEY = os.environ.get("SELLAPP_API_KEY")
@@ -100,67 +101,51 @@ def create_thumbnail(background_path, headline, accent_hex, output_path):
 
 
 def create_sellapp_product(title, description, price_cents, image_path):
+    url = "https://sell.app/api/v2/products"
     headers = {
         "Authorization": f"Bearer {SELLAPP_API_KEY}",
         "Content-Type": "application/json",
+        "Accept": "application/json"
     }
 
-    # STEP 1: Create Main Base Product
-    url_product = "https://sell.app/api/v2/products"
-    product_payload = {
-        "store_id": SELLAPP_STORE_ID,
+    payload = {
         "title": title,
         "description": description,
         "visibility": "PUBLIC",
-        "type": "product"
-    }
-
-    print("Step 1: Creating Base Product...", flush=True)
-    resp = requests.post(url_product, headers=headers, json=product_payload)
-    print(f"Product API Response Code: {resp.status_code}", flush=True)
-    print(f"Product API Response Body: {resp.text}", flush=True)
-
-    if resp.status_code not in (200, 201):
-        print("Failed to create base product.", flush=True)
-        return None
-
-    res_json = resp.json()
-    product_id = res_json.get("id")
-    if not product_id and "data" in res_json and isinstance(res_json["data"], dict):
-        product_id = res_json["data"].get("id")
-
-    if not product_id:
-        print("ERROR: Product ID could not be retrieved.", flush=True)
-        return res_json
-
-    print(f"--> Base Product Created! ID: {product_id}", flush=True)
-
-    # STEP 2: Attach Variant with Price & Stock
-    url_variant = f"https://sell.app/api/v2/products/{product_id}/variants"
-    variant_payload = {
-        "title": "Default Variant",
-        "description": "High-resolution digital thumbnail template",
-        "stock": -1,
-        "unlimited_stock": True,
-        "pricing": {
-            "type": "SINGLE_PAYMENT",
-            "humble": False,
-            "price": {"price": str(price_cents), "currency": "USD"}
-        },
-        "deliverable": {
-            "types": ["TEXT"],
-            "data": {
-                "text": "Thank you for your purchase! Your thumbnail template download is ready."
+        "variants": [
+            {
+                "title": "Default Variant",
+                "description": "High-resolution digital thumbnail template",
+                "stock": -1,
+                "unlimited_stock": True,
+                "pricing": {
+                    "type": "SINGLE_PAYMENT",
+                    "price": {
+                        "price": price_cents,
+                        "currency": "USD"
+                    }
+                },
+                "deliverable": {
+                    "types": ["TEXT"],
+                    "data": {
+                        "text": "Thank you for your purchase! Your YouTube thumbnail template download is ready."
+                    }
+                }
             }
-        }
+        ]
     }
 
-    print(f"Step 2: Attaching Variant to Product ID {product_id}...", flush=True)
-    var_resp = requests.post(url_variant, headers=headers, json=variant_payload)
-    print(f"Variant API Response Code: {var_resp.status_code}", flush=True)
-    print(f"Variant API Response Body: {var_resp.text}", flush=True)
+    print("Uploading Product to Sell.app via Single JSON Call...", flush=True)
+    resp = requests.post(url, headers=headers, json=payload)
+    print(f"Sell.app API Status Code: {resp.status_code}", flush=True)
+    print(f"Sell.app API Response Body: {resp.text}", flush=True)
 
-    return res_json
+    if resp.status_code in (200, 201):
+        print(f"SUCCESS: Product '{title}' created successfully!", flush=True)
+        return resp.json()
+    else:
+        print(f"ERROR: Failed to create product. Response: {resp.text}", flush=True)
+        return None
 
 
 def get_and_increment_run_count():
@@ -176,7 +161,7 @@ def get_and_increment_run_count():
 
 def main():
     print("--- STARTING THUMBNAIL GENERATOR ---", flush=True)
-    
+
     print("Picking a topic...", flush=True)
     topic = get_next_topic()
     headline_display = topic["headline"].replace("\n", " ")
