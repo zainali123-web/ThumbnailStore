@@ -102,37 +102,41 @@ def create_thumbnail(background_path, headline, accent_hex, output_path):
 
 
 def create_sellapp_product(title, description, price_cents, image_path):
+    """
+    Creates a product on Sell.app WITH an embedded variant.
+    This version sends the request as multipart/form-data (Laravel-style
+    bracket field names) with the image file attached directly in the
+    same request, since the pure-JSON version successfully creates the
+    product/visibility/type but leaves it "out of stock" with no error -
+    confirming the deliverable file specifically needs to be attached
+    as actual file data, not just a "types" declaration.
+    """
     url = "https://sell.app/api/v2/products"
-    headers = {
-        "Authorization": f"Bearer {SELLAPP_API_KEY}",
-        "Content-Type": "application/json",
-    }
+    headers = {"Authorization": f"Bearer {SELLAPP_API_KEY}"}
 
-    payload = {
+    data = {
         "store_id": SELLAPP_STORE_ID,
         "title": title,
         "description": description,
         "visibility": "PUBLIC",
         "type": "product",
-        "variants": [
-            {
-                "title": "Default Variant",
-                "description": "Default digital thumbnail template",
-                "stock": -1,
-                "unlimited_stock": True,
-                "pricing": {
-                    "type": "SINGLE_PAYMENT",
-                    "humble": False,
-                    "price": {"price": str(price_cents), "currency": "USD"},
-                },
-                "deliverable": {
-                    "types": ["DOWNLOADABLE"],
-                },
-            }
-        ],
+        "variants[0][title]": "Default",
+        "variants[0][description]": "default variant",
+        "variants[0][pricing][type]": "SINGLE_PAYMENT",
+        "variants[0][pricing][humble]": "false",
+        "variants[0][pricing][price][price]": str(price_cents),
+        "variants[0][pricing][price][currency]": "USD",
+        "variants[0][payment_methods][0]": "SOL",
+        "variants[0][deliverable][types][0]": "DOWNLOADABLE",
     }
 
-    response = requests.post(url, headers=headers, json=payload)
+    with open(image_path, "rb") as img_file:
+        files = {
+            "variants[0][deliverable][files][0]": (
+                os.path.basename(image_path), img_file, "image/jpeg"
+            )
+        }
+        response = requests.post(url, headers=headers, data=data, files=files)
     if response.status_code not in (200, 201):
         print(f"Sell.app product creation failed: {response.status_code} {response.text}")
         return None
