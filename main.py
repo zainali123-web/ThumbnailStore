@@ -2,8 +2,7 @@
 Automated Thumbnail Store Generator (Sell.app)
 ------------------------------------------------------------------
 Generates a professional-style YouTube thumbnail and uploads it
-to Sell.app in a single JSON API call with full variants, pricing,
-and stock configuration.
+to Sell.app with proper Pricing ($5.00), Unlimited Stock, and Deliverable.
 """
 
 import os
@@ -17,8 +16,8 @@ TOPICS_FILE = "topics_database.json"
 RUN_COUNTER_FILE = "run_counter.json"
 OUTPUT_DIR = "output"
 THUMB_SIZE = (1280, 720)
-SINGLE_PRICE_CENTS = 500     # $5.00 (Price in Cents)
-BUNDLE_PRICE_CENTS = 3000    # $30.00 bundle price
+SINGLE_PRICE_CENTS = 500     # $5.00
+BUNDLE_PRICE_CENTS = 3000    # $30.00
 
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 SELLAPP_API_KEY = os.environ.get("SELLAPP_API_KEY")
@@ -108,44 +107,74 @@ def create_sellapp_product(title, description, price_cents, image_path):
         "Accept": "application/json"
     }
 
+    price_dollars = f"{price_cents / 100:.2f}"
+
+    # Main Payload with direct Pricing & Deliverable
     payload = {
         "title": title,
         "description": description,
         "visibility": "PUBLIC",
-        "variants": [
-            {
-                "title": "Default Variant",
-                "description": "High-resolution digital thumbnail template",
-                "stock": -1,
-                "unlimited_stock": True,
-                "pricing": {
-                    "type": "SINGLE_PAYMENT",
-                    "price": {
-                        "price": price_cents,
-                        "currency": "USD"
-                    }
-                },
-                "deliverable": {
-                    "types": ["TEXT"],
-                    "data": {
-                        "text": "Thank you for your purchase! Your YouTube thumbnail template download is ready."
-                    }
-                }
+        "price": price_cents,
+        "currency": "USD",
+        "pricing": {
+            "type": "SINGLE_PAYMENT",
+            "price": {
+                "price": price_dollars,
+                "currency": "USD"
             }
-        ]
+        },
+        "stock": -1,
+        "unlimited_stock": True,
+        "deliverable": {
+            "type": "TEXT",
+            "data": {
+                "text": "Thank you for your purchase! Your high-resolution YouTube thumbnail template is ready."
+            }
+        }
     }
 
-    print("Uploading Product to Sell.app via Single JSON Call...", flush=True)
+    print("Uploading Product to Sell.app...", flush=True)
     resp = requests.post(url, headers=headers, json=payload)
     print(f"Sell.app API Status Code: {resp.status_code}", flush=True)
-    print(f"Sell.app API Response Body: {resp.text}", flush=True)
+    print(f"Sell.app API Response: {resp.text}", flush=True)
 
-    if resp.status_code in (200, 201):
-        print(f"SUCCESS: Product '{title}' created successfully!", flush=True)
-        return resp.json()
-    else:
-        print(f"ERROR: Failed to create product. Response: {resp.text}", flush=True)
+    if resp.status_code not in (200, 201):
+        print(f"ERROR: Product creation failed with code {resp.status_code}", flush=True)
         return None
+
+    res_json = resp.json()
+    product_id = res_json.get("id")
+    if not product_id and "data" in res_json and isinstance(res_json["data"], dict):
+        product_id = res_json["data"].get("id")
+
+    # Fallback Variant Attach Call (in case Sell.app requires separate variant record)
+    if product_id:
+        variant_url = f"https://sell.app/api/v2/products/{product_id}/variants"
+        variant_payload = {
+            "title": "Standard License",
+            "description": "High-resolution thumbnail template download",
+            "stock": -1,
+            "unlimited_stock": True,
+            "pricing": {
+                "type": "SINGLE_PAYMENT",
+                "price": {
+                    "price": price_dollars,
+                    "currency": "USD"
+                }
+            },
+            "deliverable": {
+                "type": "TEXT",
+                "data": {
+                    "text": "Thank you for your purchase!"
+                }
+            }
+        }
+        print(f"Attaching Variant to Product ID: {product_id}...", flush=True)
+        var_resp = requests.post(variant_url, headers=headers, json=variant_payload)
+        print(f"Variant API Status: {var_resp.status_code}", flush=True)
+        print(f"Variant API Response: {var_resp.text}", flush=True)
+
+    return res_json
 
 
 def get_and_increment_run_count():
