@@ -18,8 +18,8 @@ TOPICS_FILE = "topics_database.json"
 RUN_COUNTER_FILE = "run_counter.json"
 OUTPUT_DIR = "output"
 THUMB_SIZE = (1280, 720)
-SINGLE_PRICE_CENTS = 500     # $5.00 - Sell.app prices are in CENTS (confirmed from real API data)
-BUNDLE_PRICE_CENTS = 3000    # $30.00 bundle price (updated per request)
+SINGLE_PRICE_CENTS = 500     # $5.00 - Sell.app prices are in CENTS
+BUNDLE_PRICE_CENTS = 3000    # $30.00 bundle price
 
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 SELLAPP_API_KEY = os.environ.get("SELLAPP_API_KEY")
@@ -102,15 +102,6 @@ def create_thumbnail(background_path, headline, accent_hex, output_path):
 
 
 def create_sellapp_product(title, description, price_cents, image_path):
-    """
-    Creates a product on Sell.app WITH an embedded variant.
-    This version sends the request as multipart/form-data (Laravel-style
-    bracket field names) with the image file attached directly in the
-    same request, since the pure-JSON version successfully creates the
-    product/visibility/type but leaves it "out of stock" with no error -
-    confirming the deliverable file specifically needs to be attached
-    as actual file data, not just a "types" declaration.
-    """
     url = "https://sell.app/api/v2/products"
     headers = {"Authorization": f"Bearer {SELLAPP_API_KEY}"}
 
@@ -122,6 +113,8 @@ def create_sellapp_product(title, description, price_cents, image_path):
         "type": "product",
         "variants[0][title]": "Default",
         "variants[0][description]": "default variant",
+        "variants[0][stock]": "-1",
+        "variants[0][unlimited_stock]": "true",
         "variants[0][pricing][type]": "SINGLE_PAYMENT",
         "variants[0][pricing][humble]": "false",
         "variants[0][pricing][price][price]": str(price_cents),
@@ -137,6 +130,7 @@ def create_sellapp_product(title, description, price_cents, image_path):
             )
         }
         response = requests.post(url, headers=headers, data=data, files=files)
+
     if response.status_code not in (200, 201):
         print(f"Sell.app product creation failed: {response.status_code} {response.text}")
         return None
