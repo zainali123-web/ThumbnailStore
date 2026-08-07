@@ -2,8 +2,8 @@
 Automated Thumbnail Store Generator (Sell.app)
 ------------------------------------------------------------------
 Generates a professional-style YouTube thumbnail, uploads it as a
-product+variant on Sell.app using official API v2 JSON spec, and
-every 16 runs (4/day x 4 days) also creates a bundle listing.
+product+variant on Sell.app with proper pricing and downloadable file,
+and every 16 runs (4/day x 4 days) creates a bundle listing.
 """
 
 import os
@@ -101,9 +101,7 @@ def create_thumbnail(background_path, headline, accent_hex, output_path):
 
 
 def create_sellapp_product(title, description):
-    """
-    Creates base product on Sell.app using Bearer Auth and X-STORE header.
-    """
+    """Creates base product on Sell.app."""
     url = "https://sell.app/api/v2/products"
     headers = {
         "Authorization": f"Bearer {SELLAPP_API_KEY}",
@@ -127,48 +125,52 @@ def create_sellapp_product(title, description):
 
 def create_sellapp_variant(product_id, price_cents, image_path):
     """
-    Creates product variant based on Sell.app API v2 official JSON schema.
+    Creates variant with explicit price, unlimited stock, and attached deliverable file.
+    Uses multipart/form-data for uploading the downloadable file.
     """
     url = f"https://sell.app/api/v2/products/{product_id}/variants"
+    
+    # NOTE: Do NOT set Content-Type header here; requests will handle boundary automatically
     headers = {
         "Authorization": f"Bearer {SELLAPP_API_KEY}",
         "X-STORE": SELLAPP_STORE_ID,
-        "Content-Type": "application/json",
     }
 
-    payload = {
+    # Form parameters fixing pricing & stock issues
+    data = {
         "title": "Default Variant",
         "description": "Standard digital download variant",
-        "deliverable": {
-            "types": ["DOWNLOADABLE"],
-            "data": {
-                "stock": -1
-            }
-        },
-        "pricing": {
-            "humble": False,
-            "price": {
-                "price": price_cents,
-                "currency": "USD"
-            }
-        },
-        "minimum_purchase_quantity": 1,
-        "payment_methods": ["SOL"]
+        "pricing[type]": "SINGLE_PAYMENT",
+        "pricing[humble]": "0",
+        "pricing[price][price]": str(price_cents),
+        "pricing[price][currency]": "USD",
+        "minimum_purchase_quantity": "1",
+        "payment_methods[0]": "SOL",
+        "deliverable[0][types][0]": "DOWNLOADABLE",
+        "deliverable[0][data][stock]": "-1",  # Unlimited stock
     }
 
-    response = requests.post(url, headers=headers, json=payload)
+    file_name = os.path.basename(image_path)
+
+    with open(image_path, "rb") as f1, open(image_path, "rb") as f2:
+        files = [
+            ("deliverable[0][data][file]", (file_name, f1, "image/jpeg")),
+            ("deliverable[0][data][files][0]", (file_name, f2, "image/jpeg")),
+        ]
+
+        response = requests.post(url, headers=headers, data=data, files=files)
 
     if response.status_code not in (200, 201):
         print(f"Sell.app variant creation failed: {response.status_code} {response.text}")
         return None
 
     variant = response.json()
-    print(f"Variant created with price ${price_cents/100:.2f} using official JSON payload.")
+    print(f"Variant created successfully! Price: ${price_cents/100:.2f} | Status: In Stock (File Attached)")
     return variant
 
 
 def create_full_sellapp_listing(title, description, price_cents, image_path):
-    """Combines product creation and variant assignment."""
+    """Combines product creation and variant creation with file upload."""
     product = create_sellapp_product(title, description)
     if not product or "data" not in product or "id" not in product["data"]:
         print("Skipping variant creation - product creation did not return a valid ID.")
