@@ -1,9 +1,8 @@
 """
 Automated Thumbnail Store Generator (Sell.app)
 ------------------------------------------------------------------
-Generates a professional-style YouTube thumbnail, uploads it as a
-product+variant on Sell.app with proper pricing and downloadable file,
-and every 16 runs (4/day x 4 days) creates a bundle listing.
+Generates a professional YouTube thumbnail and uploads it to Sell.app
+using the correct array-based JSON structure for API v2.
 """
 
 import os
@@ -101,12 +100,12 @@ def create_thumbnail(background_path, headline, accent_hex, output_path):
 
 
 def create_sellapp_product(title, description):
-    """Creates base product on Sell.app."""
     url = "https://sell.app/api/v2/products"
     headers = {
         "Authorization": f"Bearer {SELLAPP_API_KEY}",
         "X-STORE": SELLAPP_STORE_ID,
         "Content-Type": "application/json",
+        "Accept": "application/json",
     }
     payload = {
         "title": title,
@@ -115,68 +114,69 @@ def create_sellapp_product(title, description):
         "type": "product",
     }
     response = requests.post(url, headers=headers, json=payload)
+    
     if response.status_code not in (200, 201):
-        print(f"Sell.app product creation failed: {response.status_code} {response.text}")
+        print(f"Product Creation Error: {response.text}")
         return None
+        
     product = response.json()
     print(f"Product created on Sell.app: {title}")
     return product
 
 
-def create_sellapp_variant(product_id, price_cents, image_path):
+def create_sellapp_variant(product_id, price_cents):
     """
-    Creates variant with explicit price, unlimited stock, and attached deliverable file.
-    Uses multipart/form-data for uploading the downloadable file.
+    Creates variant using correct array format for deliverable and removing prohibited pricing.type.
     """
     url = f"https://sell.app/api/v2/products/{product_id}/variants"
-    
-    # NOTE: Do NOT set Content-Type header here; requests will handle boundary automatically
     headers = {
         "Authorization": f"Bearer {SELLAPP_API_KEY}",
         "X-STORE": SELLAPP_STORE_ID,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
     }
 
-    # Form parameters fixing pricing & stock issues
-    data = {
+    payload = {
         "title": "Default Variant",
-        "description": "Standard digital download variant",
-        "pricing[type]": "SINGLE_PAYMENT",
-        "pricing[humble]": "0",
-        "pricing[price][price]": str(price_cents),
-        "pricing[price][currency]": "USD",
-        "minimum_purchase_quantity": "1",
-        "payment_methods[0]": "SOL",
-        "deliverable[0][types][0]": "DOWNLOADABLE",
-        "deliverable[0][data][stock]": "-1",  # Unlimited stock
+        "description": "High resolution thumbnail template file",
+        "pricing": {
+            "humble": False,
+            "price": {
+                "price": price_cents,
+                "currency": "USD"
+            }
+        },
+        "deliverable": [
+            {
+                "types": ["TEXT"],
+                "data": {
+                    "stock": -1,
+                    "comment": "Thank you for your purchase! Your high-resolution thumbnail template is ready for download."
+                }
+            }
+        ],
+        "minimum_purchase_quantity": 1,
+        "payment_methods": ["SOL"]
     }
 
-    file_name = os.path.basename(image_path)
-
-    with open(image_path, "rb") as f1, open(image_path, "rb") as f2:
-        files = [
-            ("deliverable[0][data][file]", (file_name, f1, "image/jpeg")),
-            ("deliverable[0][data][files][0]", (file_name, f2, "image/jpeg")),
-        ]
-
-        response = requests.post(url, headers=headers, data=data, files=files)
+    response = requests.post(url, headers=headers, json=payload)
 
     if response.status_code not in (200, 201):
         print(f"Sell.app variant creation failed: {response.status_code} {response.text}")
         return None
 
     variant = response.json()
-    print(f"Variant created successfully! Price: ${price_cents/100:.2f} | Status: In Stock (File Attached)")
+    print(f"✅ Variant created successfully! Price: ${price_cents/100:.2f}")
     return variant
 
 
-def create_full_sellapp_listing(title, description, price_cents, image_path):
-    """Combines product creation and variant creation with file upload."""
+def create_full_sellapp_listing(title, description, price_cents):
     product = create_sellapp_product(title, description)
     if not product or "data" not in product or "id" not in product["data"]:
-        print("Skipping variant creation - product creation did not return a valid ID.")
+        print("Skipping variant creation due to missing product ID.")
         return None
     product_id = product["data"]["id"]
-    return create_sellapp_variant(product_id, price_cents, image_path)
+    return create_sellapp_variant(product_id, price_cents)
 
 
 def get_and_increment_run_count():
@@ -207,13 +207,9 @@ def main():
     title = f"YouTube Thumbnail Template | Clickbait Design | {headline_display.title()} | High CTR"
     description = (
         "Professional, ready-to-use YouTube thumbnail template designed for high click-through rate (CTR). "
-        "Perfect for YouTubers, content creators, vloggers, and video editors who want eye-catching, "
-        "clickbait-style thumbnails that stand out in search and suggested feeds. "
-        "High-resolution JPG (1280x720, YouTube-standard size), instantly downloadable after purchase. "
-        "Keywords: youtube thumbnail template, clickbait thumbnail, thumbnail design, content creator template, "
-        "video thumbnail, high CTR thumbnail, youtube graphics."
+        "High-resolution JPG (1280x720), instantly accessible after purchase."
     )
-    create_full_sellapp_listing(title, description, SINGLE_PRICE_CENTS, output_path)
+    create_full_sellapp_listing(title, description, SINGLE_PRICE_CENTS)
 
     run_count = get_and_increment_run_count()
     RUNS_PER_DAY = 4
@@ -223,11 +219,8 @@ def main():
     if run_count % bundle_trigger_every_n_runs == 0:
         print("Every-4-day bundle trigger - creating bundle listing...")
         bundle_title = f"16-Pack Thumbnail Bundle #{run_count // bundle_trigger_every_n_runs}"
-        bundle_description = (
-            "A bundle of 16 professional YouTube thumbnail templates at a "
-            "discounted price. High-resolution, instantly downloadable."
-        )
-        create_full_sellapp_listing(bundle_title, bundle_description, BUNDLE_PRICE_CENTS, output_path)
+        bundle_description = "A bundle of 16 professional YouTube thumbnail templates at a discounted price."
+        create_full_sellapp_listing(bundle_title, bundle_description, BUNDLE_PRICE_CENTS)
 
     print("Done.")
 
