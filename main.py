@@ -2,9 +2,8 @@
 Automated Thumbnail Store Generator (Sell.app)
 ------------------------------------------------------------------
 Generates a professional-style YouTube thumbnail, uploads it as a
-product+variant on Sell.app (with confirmed field structure pulled
-directly from Sell.app's own API), and every 16 runs (4/day x 4 days)
-also creates a bundle listing.
+product+variant on Sell.app using official API v2 JSON spec, and
+every 16 runs (4/day x 4 days) also creates a bundle listing.
 """
 
 import os
@@ -19,7 +18,7 @@ RUN_COUNTER_FILE = "run_counter.json"
 OUTPUT_DIR = "output"
 THUMB_SIZE = (1280, 720)
 SINGLE_PRICE_CENTS = 500     # $5.00
-BUNDLE_PRICE_CENTS = 3000    # $30.00
+BUNDLE_PRICE_CENTS = 3000    # $30.00 bundle price
 
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 SELLAPP_API_KEY = os.environ.get("SELLAPP_API_KEY")
@@ -103,20 +102,18 @@ def create_thumbnail(background_path, headline, accent_hex, output_path):
 
 def create_sellapp_product(title, description):
     """
-    STEP A: Create the base product (title, description, visibility, type, status).
-    FIX: visibility = "public" (lowercase) and status = "active" to publish immediately.
+    Creates base product on Sell.app using Bearer Auth and X-STORE header.
     """
     url = "https://sell.app/api/v2/products"
     headers = {
         "Authorization": f"Bearer {SELLAPP_API_KEY}",
+        "X-STORE": SELLAPP_STORE_ID,
         "Content-Type": "application/json",
     }
     payload = {
-        "store_id": SELLAPP_STORE_ID,
         "title": title,
         "description": description,
-        "visibility": "public",      # FIX: lowercase
-        "status": "active",          # FIX: added to make product live immediately
+        "visibility": "PUBLIC",
         "type": "product",
     }
     response = requests.post(url, headers=headers, json=payload)
@@ -130,74 +127,54 @@ def create_sellapp_product(title, description):
 
 def create_sellapp_variant(product_id, price_cents, image_path):
     """
-    STEP B: Create a variant with pricing and the deliverable file attached.
-    FIX: added deliverable[0][name] and deliverable[0][description] to satisfy API.
+    Creates product variant based on Sell.app API v2 official JSON schema.
     """
     url = f"https://sell.app/api/v2/products/{product_id}/variants"
-    headers = {"Authorization": f"Bearer {SELLAPP_API_KEY}"}
-
-    data = {
-        "title": "Default",
-        "description": "default variant",
-        "pricing[humble]": "0",
-        "pricing[price][price]": str(price_cents),
-        "pricing[price][currency]": "USD",
-        "payment_methods[0]": "SOL",
-        "minimum_purchase_quantity": "1",
-        "deliverable[0][types][0]": "DOWNLOADABLE",
-        "deliverable[0][name]": "Thumbnail Image",           # FIX: added
-        "deliverable[0][description]": "High-res JPG",      # FIX: added (optional)
-        # pricing[type] intentionally omitted (as per Sell.app's validation)
+    headers = {
+        "Authorization": f"Bearer {SELLAPP_API_KEY}",
+        "X-STORE": SELLAPP_STORE_ID,
+        "Content-Type": "application/json",
     }
 
-    with open(image_path, "rb") as img_file:
-        file_bytes = img_file.read()
+    payload = {
+        "title": "Default Variant",
+        "description": "Standard digital download variant",
+        "deliverable": {
+            "types": ["DOWNLOADABLE"],
+            "data": {
+                "stock": -1
+            }
+        },
+        "pricing": {
+            "humble": False,
+            "price": {
+                "price": price_cents,
+                "currency": "USD"
+            }
+        },
+        "minimum_purchase_quantity": 1,
+        "payment_methods": ["SOL"]
+    }
 
-    files = [
-        ("deliverable[0][data][file]", (os.path.basename(image_path), file_bytes, "image/jpeg")),
-        ("deliverable[0][data][files][0]", (os.path.basename(image_path), file_bytes, "image/jpeg")),
-    ]
-
-    response = requests.post(url, headers=headers, data=data, files=files)
+    response = requests.post(url, headers=headers, json=payload)
 
     if response.status_code not in (200, 201):
         print(f"Sell.app variant creation failed: {response.status_code} {response.text}")
         return None
 
     variant = response.json()
-    print(f"Variant created with price ${price_cents/100:.2f} and file attached.")
+    print(f"Variant created with price ${price_cents/100:.2f} using official JSON payload.")
     return variant
 
 
-def publish_product(product_id):
-    """Ensure product is active (in case variant creation did not auto-publish)."""
-    url = f"https://sell.app/api/v2/products/{product_id}"
-    headers = {"Authorization": f"Bearer {SELLAPP_API_KEY}"}
-    payload = {"status": "active"}
-    response = requests.patch(url, headers=headers, json=payload)
-    if response.status_code in (200, 201):
-        print("Product status updated to active.")
-        return True
-    else:
-        print(f"Failed to update product status: {response.status_code} {response.text}")
-        return False
-
-
 def create_full_sellapp_listing(title, description, price_cents, image_path):
-    """Combines STEP A + STEP B and then ensures product is active."""
+    """Combines product creation and variant assignment."""
     product = create_sellapp_product(title, description)
     if not product or "data" not in product or "id" not in product["data"]:
         print("Skipping variant creation - product creation did not return a valid ID.")
         return None
     product_id = product["data"]["id"]
-    variant = create_sellapp_variant(product_id, price_cents, image_path)
-    if variant:
-        # Extra safety: force product to be active
-        publish_product(product_id)
-        return variant
-    else:
-        print("Variant creation failed; product may remain in draft.")
-        return None
+    return create_sellapp_variant(product_id, price_cents, image_path)
 
 
 def get_and_increment_run_count():
@@ -239,7 +216,7 @@ def main():
     run_count = get_and_increment_run_count()
     RUNS_PER_DAY = 4
     BUNDLE_EVERY_DAYS = 4
-    bundle_trigger_every_n_runs = RUNS_PER_DAY * BUNDLE_EVERY_DAYS  # = 16
+    bundle_trigger_every_n_runs = RUNS_PER_DAY * BUNDLE_EVERY_DAYS
 
     if run_count % bundle_trigger_every_n_runs == 0:
         print("Every-4-day bundle trigger - creating bundle listing...")
