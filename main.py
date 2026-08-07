@@ -130,10 +130,13 @@ def create_sellapp_product(title, description):
 
 def create_sellapp_variant(product_id, price_cents, image_path):
     """
-    STEP B: Create a variant on the product, with pricing and the actual
-    deliverable file attached (multipart/form-data, file sent directly).
-    This is the piece that was missing before - variants are created via
-    a SEPARATE endpoint from the product itself, not embedded in it.
+    STEP B: Create a variant with pricing and the deliverable file attached.
+    Field structure confirmed from Sell.app's own detailed validation
+    error response:
+      - deliverable must be an ARRAY, each item needs data.files AND data.file
+      - pricing.humble must be boolean-like "0"/"1" (not "true"/"false" text)
+      - pricing.type must be OMITTED (prohibited) when using humble pricing
+      - minimum_purchase_quantity is required
     """
     url = f"https://sell.app/api/v2/products/{product_id}/variants"
     headers = {"Authorization": f"Bearer {SELLAPP_API_KEY}"}
@@ -141,17 +144,23 @@ def create_sellapp_variant(product_id, price_cents, image_path):
     data = {
         "title": "Default",
         "description": "default variant",
-        "pricing[type]": "SINGLE_PAYMENT",
-        "pricing[humble]": "false",
+        "pricing[humble]": "0",
         "pricing[price][price]": str(price_cents),
         "pricing[price][currency]": "USD",
         "payment_methods[0]": "SOL",
-        "deliverable[types][0]": "DOWNLOADABLE",
+        "minimum_purchase_quantity": "1",
+        "deliverable[0][types][0]": "DOWNLOADABLE",
     }
 
     with open(image_path, "rb") as img_file:
-        files = {"deliverable[files][0]": (os.path.basename(image_path), img_file, "image/jpeg")}
-        response = requests.post(url, headers=headers, data=data, files=files)
+        file_bytes = img_file.read()
+
+    files = [
+        ("deliverable[0][data][file]", (os.path.basename(image_path), file_bytes, "image/jpeg")),
+        ("deliverable[0][data][files][0]", (os.path.basename(image_path), file_bytes, "image/jpeg")),
+    ]
+
+    response = requests.post(url, headers=headers, data=data, files=files)
 
     if response.status_code not in (200, 201):
         print(f"Sell.app variant creation failed: {response.status_code} {response.text}")
