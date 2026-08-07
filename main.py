@@ -141,20 +141,23 @@ def create_sellapp_variant(product_id, price_cents, image_path):
     url = f"https://sell.app/api/v2/products/{product_id}/variants"
     headers = {"Authorization": f"Bearer {SELLAPP_API_KEY}"}
 
+    # All data fields are sent as multipart form data (data=...)
     data = {
         "title": "Default",
         "description": "default variant",
-        "pricing[humble]": "0",
+        "pricing[humble]": "0",                         # boolean-like, false
         "pricing[price][price]": str(price_cents),
         "pricing[price][currency]": "USD",
         "payment_methods[0]": "SOL",
-        "minimum_purchase_quantity": "1",
+        "minimum_purchase_quantity": "1",               # newly required
         "deliverable[0][types][0]": "DOWNLOADABLE",
+        # pricing[type] is intentionally omitted (prohibited)
     }
 
     with open(image_path, "rb") as img_file:
         file_bytes = img_file.read()
 
+    # Both data.file and data.files are required inside the deliverable item
     files = [
         ("deliverable[0][data][file]", (os.path.basename(image_path), file_bytes, "image/jpeg")),
         ("deliverable[0][data][files][0]", (os.path.basename(image_path), file_bytes, "image/jpeg")),
