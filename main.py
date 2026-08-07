@@ -18,8 +18,8 @@ TOPICS_FILE = "topics_database.json"
 RUN_COUNTER_FILE = "run_counter.json"
 OUTPUT_DIR = "output"
 THUMB_SIZE = (1280, 720)
-SINGLE_PRICE_CENTS = 500     # $5.00 - Sell.app prices are in CENTS (confirmed from real API data)
-BUNDLE_PRICE_CENTS = 3000    # $30.00 bundle price (updated per request)
+SINGLE_PRICE_CENTS = 500     # $5.00
+BUNDLE_PRICE_CENTS = 3000    # $30.00
 
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 SELLAPP_API_KEY = os.environ.get("SELLAPP_API_KEY")
@@ -103,9 +103,8 @@ def create_thumbnail(background_path, headline, accent_hex, output_path):
 
 def create_sellapp_product(title, description):
     """
-    STEP A: Create the base product (title, description, visibility, type).
-    This part is already confirmed working - it succeeds and returns a
-    product ID, which we then use to create the variant separately.
+    STEP A: Create the base product (title, description, visibility, type, status).
+    FIX: visibility = "public" (lowercase) and status = "active" to publish immediately.
     """
     url = "https://sell.app/api/v2/products"
     headers = {
@@ -116,7 +115,8 @@ def create_sellapp_product(title, description):
         "store_id": SELLAPP_STORE_ID,
         "title": title,
         "description": description,
-        "visibility": "PUBLIC",
+        "visibility": "public",      # FIX: lowercase
+        "status": "active",          # FIX: added to make product live immediately
         "type": "product",
     }
     response = requests.post(url, headers=headers, json=payload)
@@ -131,33 +131,28 @@ def create_sellapp_product(title, description):
 def create_sellapp_variant(product_id, price_cents, image_path):
     """
     STEP B: Create a variant with pricing and the deliverable file attached.
-    Field structure confirmed from Sell.app's own detailed validation
-    error response:
-      - deliverable must be an ARRAY, each item needs data.files AND data.file
-      - pricing.humble must be boolean-like "0"/"1" (not "true"/"false" text)
-      - pricing.type must be OMITTED (prohibited) when using humble pricing
-      - minimum_purchase_quantity is required
+    FIX: added deliverable[0][name] and deliverable[0][description] to satisfy API.
     """
     url = f"https://sell.app/api/v2/products/{product_id}/variants"
     headers = {"Authorization": f"Bearer {SELLAPP_API_KEY}"}
 
-    # All data fields are sent as multipart form data (data=...)
     data = {
         "title": "Default",
         "description": "default variant",
-        "pricing[humble]": "0",                         # boolean-like, false
+        "pricing[humble]": "0",
         "pricing[price][price]": str(price_cents),
         "pricing[price][currency]": "USD",
         "payment_methods[0]": "SOL",
-        "minimum_purchase_quantity": "1",               # newly required
+        "minimum_purchase_quantity": "1",
         "deliverable[0][types][0]": "DOWNLOADABLE",
-        # pricing[type] is intentionally omitted (prohibited)
+        "deliverable[0][name]": "Thumbnail Image",           # FIX: added
+        "deliverable[0][description]": "High-res JPG",      # FIX: added (optional)
+        # pricing[type] intentionally omitted (as per Sell.app's validation)
     }
 
     with open(image_path, "rb") as img_file:
         file_bytes = img_file.read()
 
-    # Both data.file and data.files are required inside the deliverable item
     files = [
         ("deliverable[0][data][file]", (os.path.basename(image_path), file_bytes, "image/jpeg")),
         ("deliverable[0][data][files][0]", (os.path.basename(image_path), file_bytes, "image/jpeg")),
@@ -174,14 +169,35 @@ def create_sellapp_variant(product_id, price_cents, image_path):
     return variant
 
 
+def publish_product(product_id):
+    """Ensure product is active (in case variant creation did not auto-publish)."""
+    url = f"https://sell.app/api/v2/products/{product_id}"
+    headers = {"Authorization": f"Bearer {SELLAPP_API_KEY}"}
+    payload = {"status": "active"}
+    response = requests.patch(url, headers=headers, json=payload)
+    if response.status_code in (200, 201):
+        print("Product status updated to active.")
+        return True
+    else:
+        print(f"Failed to update product status: {response.status_code} {response.text}")
+        return False
+
+
 def create_full_sellapp_listing(title, description, price_cents, image_path):
-    """Combines STEP A + STEP B into one call, as main() expects."""
+    """Combines STEP A + STEP B and then ensures product is active."""
     product = create_sellapp_product(title, description)
     if not product or "data" not in product or "id" not in product["data"]:
         print("Skipping variant creation - product creation did not return a valid ID.")
         return None
     product_id = product["data"]["id"]
-    return create_sellapp_variant(product_id, price_cents, image_path)
+    variant = create_sellapp_variant(product_id, price_cents, image_path)
+    if variant:
+        # Extra safety: force product to be active
+        publish_product(product_id)
+        return variant
+    else:
+        print("Variant creation failed; product may remain in draft.")
+        return None
 
 
 def get_and_increment_run_count():
