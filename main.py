@@ -126,7 +126,8 @@ def create_sellapp_product(title, description):
 
 def create_sellapp_variant(product_id, price_cents):
     """
-    Creates variant using correct array format for deliverable and removing prohibited pricing.type.
+    Creates variant using correct array format for deliverable.
+    Fixed: Changed 'types' from 'TEXT' to 'file' and corrected data structure.
     """
     url = f"https://sell.app/api/v2/products/{product_id}/variants"
     headers = {
@@ -148,10 +149,9 @@ def create_sellapp_variant(product_id, price_cents):
         },
         "deliverable": [
             {
-                "types": ["TEXT"],
+                "types": ["file"],
                 "data": {
-                    "stock": -1,
-                    "comment": "Thank you for your purchase! Your high-resolution thumbnail template is ready for download."
+                    "stock": -1
                 }
             }
         ],
