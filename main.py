@@ -131,29 +131,20 @@ def create_sellapp_product(title, description):
 def create_sellapp_variant(product_id, price_cents, image_path):
     """
     STEP B: Create a variant with pricing and the deliverable file attached.
-    Field structure confirmed from Sell.app's own detailed validation
-    error response:
-      - deliverable must be an ARRAY, each item needs data.files AND data.file
-      - pricing.humble must be boolean-like "0"/"1" (not "true"/"false" text)
-      - pricing.type must be OMITTED (prohibited) when using humble pricing
-      - minimum_purchase_quantity is required
     """
     url = f"https://sell.app/api/v2/products/{product_id}/variants"
-    headers = {"Authorization": f"Bearer {SELLAPP_API_KEY}"}
-data = {
+    headers = {
+        "Authorization": f"Bearer {SELLAPP_API_KEY}",
+        "Accept": "application/json"
+    }
+
+    # Form Data for multipart request
+    data = {
         "title": "Default Variant",
-        "price": price,
-        "deliverable": {
-            "types": ["DOWNLOADABLE_FILES"],
-            "data": {
-                "DOWNLOADABLE_FILES": [
-                    {
-                        "id": file_id
-                    }
-                ]
-            }
-        }
-    }  # Line 156 par yeh aakhri bracket match hona chahiye
+        "pricing[price]": price_cents,
+        "deliverable[0][type]": "DOWNLOADABLE_FILES",
+        "minimum_purchase_quantity": 1
+    }
 
     with open(image_path, "rb") as img_file:
         file_bytes = img_file.read()
