@@ -140,16 +140,19 @@ def create_sellapp_variant(product_id, price_cents, image_path):
     """
     url = f"https://sell.app/api/v2/products/{product_id}/variants"
     headers = {"Authorization": f"Bearer {SELLAPP_API_KEY}"}
+# ❌ Purana deliverable (jo error de raha hai) hata kar yeh Replace karein:
 
-    data = {
-        "title": "Default",
-        "description": "default variant",
-        "pricing[humble]": "0",
-        "pricing[price][price]": str(price_cents),
-        "pricing[price][currency]": "USD",
-        "payment_methods[0]": "SOL",
-        "minimum_purchase_quantity": "1",
-        "deliverable[0][types][0]": "DOWNLOADABLE",
+"deliverable": {
+    "types": ["DOWNLOADABLE_FILES"],
+    "data": {
+        "DOWNLOADABLE_FILES": [
+            {
+                "id": file_id  # Yahan aapka deliverable file ID aayega
+            }
+        ]
+    }
+}
+   
     }
 
     with open(image_path, "rb") as img_file:
