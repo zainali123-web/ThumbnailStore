@@ -140,20 +140,20 @@ def create_sellapp_variant(product_id, price_cents, image_path):
     """
     url = f"https://sell.app/api/v2/products/{product_id}/variants"
     headers = {"Authorization": f"Bearer {SELLAPP_API_KEY}"}
-# ❌ Purana deliverable (jo error de raha hai) hata kar yeh Replace karein:
-
-"deliverable": {
-    "types": ["DOWNLOADABLE_FILES"],
-    "data": {
-        "DOWNLOADABLE_FILES": [
-            {
-                "id": file_id  # Yahan aapka deliverable file ID aayega
+data = {
+        "title": "Default Variant",
+        "price": price,
+        "deliverable": {
+            "types": ["DOWNLOADABLE_FILES"],
+            "data": {
+                "DOWNLOADABLE_FILES": [
+                    {
+                        "id": file_id
+                    }
+                ]
             }
-        ]
-    }
-}
-   
-    }
+        }
+    }  # Line 156 par yeh aakhri bracket match hona chahiye
 
     with open(image_path, "rb") as img_file:
         file_bytes = img_file.read()
