@@ -18,8 +18,8 @@ TOPICS_FILE = "topics_database.json"
 RUN_COUNTER_FILE = "run_counter.json"
 OUTPUT_DIR = "output"
 THUMB_SIZE = (1280, 720)
-SINGLE_PRICE_CENTS = 500     # $5.00 - Sell.app prices are in CENTS (confirmed from real API data)
-BUNDLE_PRICE_CENTS = 3000    # $30.00 bundle price (updated per request)
+SINGLE_PRICE_CENTS = 500     # $5.00
+BUNDLE_PRICE_CENTS = 3000    # $30.00
 
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 SELLAPP_API_KEY = os.environ.get("SELLAPP_API_KEY")
@@ -102,11 +102,7 @@ def create_thumbnail(background_path, headline, accent_hex, output_path):
 
 
 def create_sellapp_product(title, description):
-    """
-    STEP A: Create the base product (title, description, visibility, type).
-    This part is already confirmed working - it succeeds and returns a
-    product ID, which we then use to create the variant separately.
-    """
+    """STEP A: Create base product"""
     url = "https://sell.app/api/v2/products"
     headers = {
         "Authorization": f"Bearer {SELLAPP_API_KEY}",
@@ -129,44 +125,52 @@ def create_sellapp_product(title, description):
 
 
 def create_sellapp_variant(product_id, price_cents, image_path):
-    """
-    STEP B: Create a variant with pricing and the deliverable file attached.
-    """
+    """STEP B: Create variant with valid JSON structure"""
     url = f"https://sell.app/api/v2/products/{product_id}/variants"
     headers = {
         "Authorization": f"Bearer {SELLAPP_API_KEY}",
+        "Content-Type": "application/json",
         "Accept": "application/json"
     }
 
-    # Form Data for multipart request
-    data = {
+    payload = {
         "title": "Default Variant",
-        "pricing[price]": price_cents,
-        "deliverable[0][type]": "DOWNLOADABLE_FILES",
-        "minimum_purchase_quantity": 1
+        "description": "Instant download thumbnail template",
+        "payment_methods": ["stripe", "paypal"],
+        "pricing": {
+            "price": [
+                {
+                    "currency": "USD",
+                    "amount": price_cents / 100
+                }
+            ],
+            "humble": False
+        },
+        "deliverable": {
+            "types": ["DOWNLOADABLE_FILES"],
+            "data": {
+                "DOWNLOADABLE_FILES": [
+                    {
+                        "name": os.path.basename(image_path)
+                    }
+                ]
+            }
+        }
     }
 
-    with open(image_path, "rb") as img_file:
-        file_bytes = img_file.read()
-
-    files = [
-        ("deliverable[0][data][file]", (os.path.basename(image_path), file_bytes, "image/jpeg")),
-        ("deliverable[0][data][files][0]", (os.path.basename(image_path), file_bytes, "image/jpeg")),
-    ]
-
-    response = requests.post(url, headers=headers, data=data, files=files)
+    response = requests.post(url, headers=headers, json=payload)
 
     if response.status_code not in (200, 201):
         print(f"Sell.app variant creation failed: {response.status_code} {response.text}")
         return None
 
     variant = response.json()
-    print(f"Variant created with price ${price_cents/100:.2f} and file attached.")
+    print(f"Variant created with price ${price_cents/100:.2f}.")
     return variant
 
 
 def create_full_sellapp_listing(title, description, price_cents, image_path):
-    """Combines STEP A + STEP B into one call, as main() expects."""
+    """Combines STEP A + STEP B"""
     product = create_sellapp_product(title, description)
     if not product or "data" not in product or "id" not in product["data"]:
         print("Skipping variant creation - product creation did not return a valid ID.")
