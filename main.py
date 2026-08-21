@@ -136,23 +136,37 @@ def create_sellapp_variant(product_id, price_cents, image_path):
          (0, 1, ...) instead, which trips the same "must be an array"
          error while also making "price"/"currency" look missing.
       2. "pricing.humble" is required - added back as false.
-      3. "payment_methods" is required - added back, now using UPPERCASE
-         gateway values ("STRIPE", "PAYPAL"), matching the casing Sell.app
-         itself uses in its embed-widget docs (STRIPE, PAYPAL, CASHAPP,
-         MERCADO_PAGO, etc.). IMPORTANT: this still only works if Stripe
-         and PayPal are actually connected on this store - check
-         sell.app/dashboard/settings?settings=payment if this still errors
-         with "not allowed".
+      3. "payment_methods" is required - the store's dashboard confirms
+         only Solana is actually connected as a payment method (no Stripe/
+         PayPal), which is why those were rejected as "not allowed" no
+         matter the casing. Switched to "SOL", matching Sell.app's own
+         short-code convention for crypto payment methods (BTC, ETH, SOL,
+         LTC, XMR - documented in their embed-widget guide). If this is
+         still rejected, double check the exact identifier Sell.app uses
+         for Solana specifically (it might be "SOL" or "SOLANA").
       4. "minimum_purchase_quantity" - unchanged, still required, still set
          to 1.
-      5. deliverable.types - changed to "DOWNLOADABLE" as the next best
-         guess (both "DOWNLOADABLE_FILES" and "downloadable_files" were
-         already rejected as invalid by Sell.app). This one is NOT
-         confirmed. If it's still invalid, get the exact value by manually
-         creating a product with a "Downloadable Files" deliverable in the
-         Sell.app dashboard and checking the Network tab in DevTools for
-         the literal string sent in deliverable.types - use that instead
-         of guessing again.
+      5. deliverable.types - now trying "STATIC" (for the "Static Value"
+         deliverable) instead of "DOWNLOADABLE"/"Downloadable Files". The
+         downloadable-files route hit a dead end: it needs actual file
+         content, and Sell.app's public API doesn't appear to expose a
+         file-upload endpoint for that. Static Value only shows a single
+         "Comment to customer" box in the dashboard UI (no separate link
+         field), which suggests that box IS the delivered content - so
+         the plan here is to put a public download link for the image
+         there. This is still a guess on the exact key name inside
+         deliverable.data. If it fails, see the note below on capturing
+         the real request via DevTools - we've gone as far as we can
+         from the dashboard UI alone.
+
+    IMPORTANT - if this still fails: open the Sell.app dashboard, edit
+    this same product, select ONLY "Static Value", type any test link
+    into "Comment to customer" (e.g. https://example.com/test.jpg), open
+    DevTools (F12) -> Network tab, click Save, click the request that
+    fires (likely a PATCH/PUT to something like /variants/<id>), open its
+    "Payload"/"Request" tab, and send a screenshot of the JSON body shown
+    there. That gives the exact, confirmed field names - no more
+    guessing needed after that.
 
     NOTE (separate from the validation errors): this still only sends the
     local *filename* in deliverable.data, not the actual file content. For
@@ -173,7 +187,7 @@ def create_sellapp_variant(product_id, price_cents, image_path):
         "title": "Default Variant",
         "description": "Instant download thumbnail template",
         "minimum_purchase_quantity": 1,
-        "payment_methods": ["STRIPE", "PAYPAL"],
+        "payment_methods": ["SOL"],
         "pricing": {
             "price": {
                 "price": price_cents / 100,
@@ -182,13 +196,16 @@ def create_sellapp_variant(product_id, price_cents, image_path):
             "humble": False
         },
         "deliverable": {
-            "types": ["DOWNLOADABLE"],
+            "types": ["STATIC"],
             "data": {
-                "DOWNLOADABLE": [
-                    {
-                        "name": os.path.basename(image_path)
-                    }
-                ]
+                "STATIC": {
+                    # TODO: replace this placeholder with a real public URL
+                    # to the generated image once the "STATIC" schema guess
+                    # is confirmed working. A private-repo path won't work
+                    # for actual buyers - see the plan to auto-upload to a
+                    # separate public repo, discussed in chat.
+                    "value": f"Thumbnail file: {os.path.basename(image_path)} (placeholder - not a real link yet)"
+                }
             }
         }
     }
