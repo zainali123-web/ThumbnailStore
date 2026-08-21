@@ -125,7 +125,41 @@ def create_sellapp_product(title, description):
 
 
 def create_sellapp_variant(product_id, price_cents, image_path):
-    """STEP B: Create variant with valid JSON structure"""
+    """
+    STEP B: Create variant with valid JSON structure
+
+    Fixes applied vs the previous version, based on the 422 errors seen:
+      1. pricing.price entries use the key "price" (not "amount") -
+         Sell.app's validator literally requires "pricing.price.price".
+      2. "minimum_purchase_quantity" is a required top-level field - added.
+      3. deliverable.types value changed to lowercase "downloadable_files".
+         Sell.app rejected the uppercase "DOWNLOADABLE_FILES" as an invalid
+         option, so this assumes their accepted values are lowercase
+         snake_case. If this specific string still comes back invalid,
+         open the Sell.app dashboard, manually create a product with a
+         "Downloadable Files" deliverable, and check the Network tab in
+         DevTools for the exact string sent in deliverable.types - use
+         that literal value here instead.
+      4. "payment_methods" was hardcoded to ["stripe", "paypal"], which
+         Sell.app rejected with "Payment Method stripe is not allowed" /
+         "paypal is not allowed" - meaning those gateways aren't actually
+         connected on this store. The key is removed here so Sell.app
+         falls back to whatever payment methods the store has enabled.
+         If you want to explicitly restrict it, connect Stripe/PayPal at
+         sell.app/dashboard/settings?settings=payment first, then add
+         "payment_methods": ["stripe", "paypal"] back in.
+      5. Removed "humble" - not a confirmed/required field, and it wasn't
+         mentioned anywhere in Sell.app's own docs, so it's safer left out
+         until confirmed.
+
+    NOTE (separate from the validation errors): this still only sends the
+    local *filename* in deliverable.data, not the actual file content. For
+    the product to deliver a real file to buyers, the image likely needs
+    to be uploaded to Sell.app first (a file-upload endpoint returning a
+    file id/URL), with that reference used in deliverable.data instead of
+    just the filename. Worth double-checking against Sell.app's Product
+    Variants API reference or a manual dashboard upload's Network request.
+    """
     url = f"https://sell.app/api/v2/products/{product_id}/variants"
     headers = {
         "Authorization": f"Bearer {SELLAPP_API_KEY}",
@@ -136,20 +170,19 @@ def create_sellapp_variant(product_id, price_cents, image_path):
     payload = {
         "title": "Default Variant",
         "description": "Instant download thumbnail template",
-        "payment_methods": ["stripe", "paypal"],
+        "minimum_purchase_quantity": 1,
         "pricing": {
             "price": [
                 {
-                    "currency": "USD",
-                    "amount": price_cents / 100
+                    "price": price_cents / 100,
+                    "currency": "USD"
                 }
-            ],
-            "humble": False
+            ]
         },
         "deliverable": {
-            "types": ["DOWNLOADABLE_FILES"],
+            "types": ["downloadable_files"],
             "data": {
-                "DOWNLOADABLE_FILES": [
+                "downloadable_files": [
                     {
                         "name": os.path.basename(image_path)
                     }
