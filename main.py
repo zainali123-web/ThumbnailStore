@@ -128,29 +128,31 @@ def create_sellapp_variant(product_id, price_cents, image_path):
     """
     STEP B: Create variant with valid JSON structure
 
-    Fixes applied vs the previous version, based on the 422 errors seen:
-      1. pricing.price entries use the key "price" (not "amount") -
-         Sell.app's validator literally requires "pricing.price.price".
-      2. "minimum_purchase_quantity" is a required top-level field - added.
-      3. deliverable.types value changed to lowercase "downloadable_files".
-         Sell.app rejected the uppercase "DOWNLOADABLE_FILES" as an invalid
-         option, so this assumes their accepted values are lowercase
-         snake_case. If this specific string still comes back invalid,
-         open the Sell.app dashboard, manually create a product with a
-         "Downloadable Files" deliverable, and check the Network tab in
-         DevTools for the exact string sent in deliverable.types - use
-         that literal value here instead.
-      4. "payment_methods" was hardcoded to ["stripe", "paypal"], which
-         Sell.app rejected with "Payment Method stripe is not allowed" /
-         "paypal is not allowed" - meaning those gateways aren't actually
-         connected on this store. The key is removed here so Sell.app
-         falls back to whatever payment methods the store has enabled.
-         If you want to explicitly restrict it, connect Stripe/PayPal at
-         sell.app/dashboard/settings?settings=payment first, then add
-         "payment_methods": ["stripe", "paypal"] back in.
-      5. Removed "humble" - not a confirmed/required field, and it wasn't
-         mentioned anywhere in Sell.app's own docs, so it's safer left out
-         until confirmed.
+    Fixes applied vs the previous version, based on the latest 422 errors:
+      1. pricing.price is a flat OBJECT, not a list. The earlier list-
+         wrapped version (`"price": [{...}]`) failed because Sell.app's
+         validator checks that pricing.price only contains the keys
+         "price" and "currency" directly - a JSON list has numeric keys
+         (0, 1, ...) instead, which trips the same "must be an array"
+         error while also making "price"/"currency" look missing.
+      2. "pricing.humble" is required - added back as false.
+      3. "payment_methods" is required - added back, now using UPPERCASE
+         gateway values ("STRIPE", "PAYPAL"), matching the casing Sell.app
+         itself uses in its embed-widget docs (STRIPE, PAYPAL, CASHAPP,
+         MERCADO_PAGO, etc.). IMPORTANT: this still only works if Stripe
+         and PayPal are actually connected on this store - check
+         sell.app/dashboard/settings?settings=payment if this still errors
+         with "not allowed".
+      4. "minimum_purchase_quantity" - unchanged, still required, still set
+         to 1.
+      5. deliverable.types - changed to "DOWNLOADABLE" as the next best
+         guess (both "DOWNLOADABLE_FILES" and "downloadable_files" were
+         already rejected as invalid by Sell.app). This one is NOT
+         confirmed. If it's still invalid, get the exact value by manually
+         creating a product with a "Downloadable Files" deliverable in the
+         Sell.app dashboard and checking the Network tab in DevTools for
+         the literal string sent in deliverable.types - use that instead
+         of guessing again.
 
     NOTE (separate from the validation errors): this still only sends the
     local *filename* in deliverable.data, not the actual file content. For
@@ -171,18 +173,18 @@ def create_sellapp_variant(product_id, price_cents, image_path):
         "title": "Default Variant",
         "description": "Instant download thumbnail template",
         "minimum_purchase_quantity": 1,
+        "payment_methods": ["STRIPE", "PAYPAL"],
         "pricing": {
-            "price": [
-                {
-                    "price": price_cents / 100,
-                    "currency": "USD"
-                }
-            ]
+            "price": {
+                "price": price_cents / 100,
+                "currency": "USD"
+            },
+            "humble": False
         },
         "deliverable": {
-            "types": ["downloadable_files"],
+            "types": ["DOWNLOADABLE"],
             "data": {
-                "downloadable_files": [
+                "DOWNLOADABLE": [
                     {
                         "name": os.path.basename(image_path)
                     }
