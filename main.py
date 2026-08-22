@@ -25,6 +25,14 @@ PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 SELLAPP_API_KEY = os.environ.get("SELLAPP_API_KEY")
 SELLAPP_STORE_ID = os.environ.get("SELLAPP_STORE_ID")
 
+# Used to host generated thumbnails at a public URL so Sell.app's "Manual"
+# deliverable (a link/comment shown to the buyer) can point somewhere real.
+# ThumbnailStore itself is private, so images are pushed to a SEPARATE
+# public repo instead - see the setup notes above create_sellapp_variant().
+GITHUB_ASSET_TOKEN = os.environ.get("GITHUB_ASSET_TOKEN")
+GITHUB_ASSET_REPO = os.environ.get("GITHUB_ASSET_REPO")     # e.g. "zainali123-web/thumbnail-assets"
+GITHUB_ASSET_BRANCH = os.environ.get("GITHUB_ASSET_BRANCH", "main")
+
 FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -101,6 +109,63 @@ def create_thumbnail(background_path, headline, accent_hex, output_path):
     return output_path
 
 
+def upload_image_publicly(image_path):
+    """
+    Uploads the generated thumbnail to a separate PUBLIC GitHub repo via
+    GitHub's own Contents API, and returns a public raw.githubusercontent.com
+    URL for it. ThumbnailStore itself stays private; only images go to the
+    public repo, one file per thumbnail.
+
+    One-time setup needed (not per-run - do this once):
+      1. Create a new PUBLIC repo, e.g. "thumbnail-assets", under the same
+         GitHub account/org.
+      2. Create a GitHub Personal Access Token with write access to just
+         that repo (Settings -> Developer settings -> Fine-grained tokens ->
+         Repository access: only "thumbnail-assets" -> Permissions:
+         Contents: Read and write).
+      3. In the ThumbnailStore repo -> Settings -> Secrets and variables ->
+         Actions, add:
+           - GITHUB_ASSET_TOKEN = the token from step 2
+           - GITHUB_ASSET_REPO  = "yourusername/thumbnail-assets"
+      4. In the workflow YAML (the step that runs `python main.py`), add
+         these two as extra env vars alongside the existing ones:
+           GITHUB_ASSET_TOKEN: ${{ secrets.GITHUB_ASSET_TOKEN }}
+           GITHUB_ASSET_REPO: ${{ secrets.GITHUB_ASSET_REPO }}
+    After that, every run uploads and links automatically - no manual step.
+    """
+    import base64
+
+    if not GITHUB_ASSET_TOKEN or not GITHUB_ASSET_REPO:
+        raise Exception(
+            "GITHUB_ASSET_TOKEN / GITHUB_ASSET_REPO not set - see the "
+            "one-time setup notes in upload_image_publicly()'s docstring."
+        )
+
+    filename = os.path.basename(image_path)
+    repo_path = f"images/{filename}"
+
+    with open(image_path, "rb") as f:
+        content_b64 = base64.b64encode(f.read()).decode("utf-8")
+
+    api_url = f"https://api.github.com/repos/{GITHUB_ASSET_REPO}/contents/{repo_path}"
+    headers = {
+        "Authorization": f"Bearer {GITHUB_ASSET_TOKEN}",
+        "Accept": "application/vnd.github+json",
+    }
+    payload = {
+        "message": f"Add thumbnail {filename}",
+        "content": content_b64,
+        "branch": GITHUB_ASSET_BRANCH,
+    }
+    response = requests.put(api_url, headers=headers, json=payload)
+    if response.status_code not in (200, 201):
+        raise Exception(f"Public asset upload failed: {response.status_code} {response.text}")
+
+    raw_url = f"https://raw.githubusercontent.com/{GITHUB_ASSET_REPO}/{GITHUB_ASSET_BRANCH}/{repo_path}"
+    print(f"Image uploaded publicly: {raw_url}")
+    return raw_url
+
+
 def create_sellapp_product(title, description):
     """STEP A: Create base product"""
     url = "https://sell.app/api/v2/products"
@@ -124,57 +189,26 @@ def create_sellapp_product(title, description):
     return product
 
 
-def create_sellapp_variant(product_id, price_cents, image_path):
+def create_sellapp_variant(product_id, price_cents, image_url):
     """
-    STEP B: Create variant with valid JSON structure
+    STEP B: Create variant with confirmed JSON structure.
 
-    Fixes applied vs the previous version, based on the latest 422 errors:
-      1. pricing.price is a flat OBJECT, not a list. The earlier list-
-         wrapped version (`"price": [{...}]`) failed because Sell.app's
-         validator checks that pricing.price only contains the keys
-         "price" and "currency" directly - a JSON list has numeric keys
-         (0, 1, ...) instead, which trips the same "must be an array"
-         error while also making "price"/"currency" look missing.
-      2. "pricing.humble" is required - added back as false.
-      3. "payment_methods" is required - the store's dashboard confirms
-         only Solana is actually connected as a payment method (no Stripe/
-         PayPal), which is why those were rejected as "not allowed" no
-         matter the casing. Switched to "SOL", matching Sell.app's own
-         short-code convention for crypto payment methods (BTC, ETH, SOL,
-         LTC, XMR - documented in their embed-widget guide). If this is
-         still rejected, double check the exact identifier Sell.app uses
-         for Solana specifically (it might be "SOL" or "SOLANA").
-      4. "minimum_purchase_quantity" - unchanged, still required, still set
-         to 1.
-      5. deliverable.types - now trying "STATIC" (for the "Static Value"
-         deliverable) instead of "DOWNLOADABLE"/"Downloadable Files". The
-         downloadable-files route hit a dead end: it needs actual file
-         content, and Sell.app's public API doesn't appear to expose a
-         file-upload endpoint for that. Static Value only shows a single
-         "Comment to customer" box in the dashboard UI (no separate link
-         field), which suggests that box IS the delivered content - so
-         the plan here is to put a public download link for the image
-         there. This is still a guess on the exact key name inside
-         deliverable.data. If it fails, see the note below on capturing
-         the real request via DevTools - we've gone as far as we can
-         from the dashboard UI alone.
+    This structure was captured directly from Sell.app's own dashboard
+    (via DevTools -> Network -> Payload while saving a real product), so
+    these field names/values are confirmed, not guesses:
 
-    IMPORTANT - if this still fails: open the Sell.app dashboard, edit
-    this same product, select ONLY "Static Value", type any test link
-    into "Comment to customer" (e.g. https://example.com/test.jpg), open
-    DevTools (F12) -> Network tab, click Save, click the request that
-    fires (likely a PATCH/PUT to something like /variants/<id>), open its
-    "Payload"/"Request" tab, and send a screenshot of the JSON body shown
-    there. That gives the exact, confirmed field names - no more
-    guessing needed after that.
-
-    NOTE (separate from the validation errors): this still only sends the
-    local *filename* in deliverable.data, not the actual file content. For
-    the product to deliver a real file to buyers, the image likely needs
-    to be uploaded to Sell.app first (a file-upload endpoint returning a
-    file id/URL), with that reference used in deliverable.data instead of
-    just the filename. Worth double-checking against Sell.app's Product
-    Variants API reference or a manual dashboard upload's Network request.
+      - pricing.price is a flat OBJECT: {"price": ..., "currency": "USD"}
+      - pricing.humble is required (False = fixed price, not
+        "pay what you want")
+      - payment_methods must match what's actually connected on the store
+        - this store only has Solana connected, so ["SOL"]
+      - minimum_purchase_quantity is required
+      - deliverable.types uses "MANUAL" for a manually-delivered
+        link/message (Sell.app's dashboard calls this "Static Value" in
+        the UI, but the underlying type value is "MANUAL")
+      - deliverable.data.comment holds the actual text/link shown to the
+        buyer after purchase - this is where the public download link for
+        the thumbnail goes
     """
     url = f"https://sell.app/api/v2/products/{product_id}/variants"
     headers = {
@@ -196,16 +230,9 @@ def create_sellapp_variant(product_id, price_cents, image_path):
             "humble": False
         },
         "deliverable": {
-            "types": ["STATIC"],
+            "types": ["MANUAL"],
             "data": {
-                "STATIC": {
-                    # TODO: replace this placeholder with a real public URL
-                    # to the generated image once the "STATIC" schema guess
-                    # is confirmed working. A private-repo path won't work
-                    # for actual buyers - see the plan to auto-upload to a
-                    # separate public repo, discussed in chat.
-                    "value": f"Thumbnail file: {os.path.basename(image_path)} (placeholder - not a real link yet)"
-                }
+                "comment": f"Here is your thumbnail download link: {image_url}"
             }
         }
     }
@@ -222,13 +249,14 @@ def create_sellapp_variant(product_id, price_cents, image_path):
 
 
 def create_full_sellapp_listing(title, description, price_cents, image_path):
-    """Combines STEP A + STEP B"""
+    """Combines: upload image publicly -> create product -> create variant"""
+    image_url = upload_image_publicly(image_path)
     product = create_sellapp_product(title, description)
     if not product or "data" not in product or "id" not in product["data"]:
         print("Skipping variant creation - product creation did not return a valid ID.")
         return None
     product_id = product["data"]["id"]
-    return create_sellapp_variant(product_id, price_cents, image_path)
+    return create_sellapp_variant(product_id, price_cents, image_url)
 
 
 def get_and_increment_run_count():
