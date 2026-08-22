@@ -1,8 +1,6 @@
 name: Auto Thumbnail Generator
-
 permissions:
   contents: write
-
 on:
   schedule:
     - cron: "0 9 * * *"
@@ -10,29 +8,26 @@ on:
     - cron: "0 18 * * *"
     - cron: "0 22 * * *"
   workflow_dispatch:
-
 jobs:
   generate:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
       - name: Install dependencies
         run: pip install -r requirements.txt
-
       - name: Run thumbnail generator
         env:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           SELLAPP_API_KEY: ${{ secrets.SELLAPP_API_KEY }}
           SELLAPP_STORE_ID: ${{ secrets.SELLAPP_STORE_ID }}
+          GITHUB_ASSET_TOKEN: ${{ secrets.ASSET_TOKEN }}
+          GITHUB_ASSET_REPO: ${{ secrets.ASSET_REPO }}
         run: python main.py
-
       - name: Commit updated tracking files
         run: |
           git config user.name "github-actions"
