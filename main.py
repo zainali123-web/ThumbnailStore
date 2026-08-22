@@ -165,13 +165,6 @@ def upload_image_publicly(image_path):
         "branch": asset_branch,
     }
 
-    # Diagnostic info - safe to print (no token contents, just its length,
-    # which reveals whitespace/formatting issues without exposing the secret).
-    print(f"[debug] ASSET_REPO = '{asset_repo}' (length {len(asset_repo)})")
-    print(f"[debug] ASSET_BRANCH = '{asset_branch}'")
-    print(f"[debug] ASSET_TOKEN length = {len(asset_token)} chars, starts with '{asset_token[:8]}...'")
-    print(f"[debug] Request URL = {api_url}")
-
     response = requests.put(api_url, headers=headers, json=payload)
     if response.status_code not in (200, 201):
         raise Exception(f"Public asset upload failed: {response.status_code} {response.text}")
@@ -239,7 +232,7 @@ def create_sellapp_variant(product_id, price_cents, image_url):
         "payment_methods": ["SOL"],
         "pricing": {
             "price": {
-                "price": price_cents / 100,
+                "price": f"{price_cents / 100:.2f}",
                 "currency": "USD"
             },
             "humble": False
