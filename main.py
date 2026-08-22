@@ -232,7 +232,7 @@ def create_sellapp_variant(product_id, price_cents, image_url):
         "payment_methods": ["SOL"],
         "pricing": {
             "price": {
-                "price": f"{price_cents / 100:.2f}",
+                "price": price_cents,
                 "currency": "USD"
             },
             "humble": False
