@@ -25,8 +25,8 @@ jobs:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           SELLAPP_API_KEY: ${{ secrets.SELLAPP_API_KEY }}
           SELLAPP_STORE_ID: ${{ secrets.SELLAPP_STORE_ID }}
-          GITHUB_ASSET_TOKEN: ${{ secrets.ASSET_TOKEN }}
-          GITHUB_ASSET_REPO: ${{ secrets.ASSET_REPO }}
+          ASSET_TOKEN: ${{ secrets.ASSET_TOKEN }}
+          ASSET_REPO: ${{ secrets.ASSET_REPO }}
         run: python main.py
       - name: Commit updated tracking files
         run: |
