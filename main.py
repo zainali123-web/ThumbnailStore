@@ -29,9 +29,9 @@ SELLAPP_STORE_ID = os.environ.get("SELLAPP_STORE_ID")
 # deliverable (a link/comment shown to the buyer) can point somewhere real.
 # ThumbnailStore itself is private, so images are pushed to a SEPARATE
 # public repo instead - see the setup notes above create_sellapp_variant().
-GITHUB_ASSET_TOKEN = os.environ.get("GITHUB_ASSET_TOKEN")
-GITHUB_ASSET_REPO = os.environ.get("GITHUB_ASSET_REPO")     # e.g. "zainali123-web/thumbnail-assets"
-GITHUB_ASSET_BRANCH = os.environ.get("GITHUB_ASSET_BRANCH", "main")
+ASSET_TOKEN = os.environ.get("ASSET_TOKEN")
+ASSET_REPO = os.environ.get("ASSET_REPO")     # e.g. "zainali123-web/thumbnail-assets"
+ASSET_BRANCH = os.environ.get("ASSET_BRANCH", "main")
 
 FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 
@@ -125,19 +125,19 @@ def upload_image_publicly(image_path):
          Contents: Read and write).
       3. In the ThumbnailStore repo -> Settings -> Secrets and variables ->
          Actions, add:
-           - GITHUB_ASSET_TOKEN = the token from step 2
-           - GITHUB_ASSET_REPO  = "yourusername/thumbnail-assets"
+           - ASSET_TOKEN = the token from step 2
+           - ASSET_REPO  = "yourusername/thumbnail-assets"
       4. In the workflow YAML (the step that runs `python main.py`), add
          these two as extra env vars alongside the existing ones:
-           GITHUB_ASSET_TOKEN: ${{ secrets.GITHUB_ASSET_TOKEN }}
-           GITHUB_ASSET_REPO: ${{ secrets.GITHUB_ASSET_REPO }}
+           ASSET_TOKEN: ${{ secrets.ASSET_TOKEN }}
+           ASSET_REPO: ${{ secrets.ASSET_REPO }}
     After that, every run uploads and links automatically - no manual step.
     """
     import base64
 
-    if not GITHUB_ASSET_TOKEN or not GITHUB_ASSET_REPO:
+    if not ASSET_TOKEN or not ASSET_REPO:
         raise Exception(
-            "GITHUB_ASSET_TOKEN / GITHUB_ASSET_REPO not set - see the "
+            "ASSET_TOKEN / ASSET_REPO not set - see the "
             "one-time setup notes in upload_image_publicly()'s docstring."
         )
 
@@ -147,21 +147,21 @@ def upload_image_publicly(image_path):
     with open(image_path, "rb") as f:
         content_b64 = base64.b64encode(f.read()).decode("utf-8")
 
-    api_url = f"https://api.github.com/repos/{GITHUB_ASSET_REPO}/contents/{repo_path}"
+    api_url = f"https://api.github.com/repos/{ASSET_REPO}/contents/{repo_path}"
     headers = {
-        "Authorization": f"Bearer {GITHUB_ASSET_TOKEN}",
+        "Authorization": f"Bearer {ASSET_TOKEN}",
         "Accept": "application/vnd.github+json",
     }
     payload = {
         "message": f"Add thumbnail {filename}",
         "content": content_b64,
-        "branch": GITHUB_ASSET_BRANCH,
+        "branch": ASSET_BRANCH,
     }
     response = requests.put(api_url, headers=headers, json=payload)
     if response.status_code not in (200, 201):
         raise Exception(f"Public asset upload failed: {response.status_code} {response.text}")
 
-    raw_url = f"https://raw.githubusercontent.com/{GITHUB_ASSET_REPO}/{GITHUB_ASSET_BRANCH}/{repo_path}"
+    raw_url = f"https://raw.githubusercontent.com/{ASSET_REPO}/{ASSET_BRANCH}/{repo_path}"
     print(f"Image uploaded publicly: {raw_url}")
     return raw_url
 
