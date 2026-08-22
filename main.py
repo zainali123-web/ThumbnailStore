@@ -141,27 +141,42 @@ def upload_image_publicly(image_path):
             "one-time setup notes in upload_image_publicly()'s docstring."
         )
 
+    # Defensive: strip accidental whitespace/newlines that can sneak in when
+    # copy-pasting secret values - a stray newline in a token or repo name is
+    # a common, hard-to-spot cause of 404s from the GitHub API.
+    asset_token = ASSET_TOKEN.strip()
+    asset_repo = ASSET_REPO.strip()
+    asset_branch = ASSET_BRANCH.strip()
+
     filename = os.path.basename(image_path)
     repo_path = f"images/{filename}"
 
     with open(image_path, "rb") as f:
         content_b64 = base64.b64encode(f.read()).decode("utf-8")
 
-    api_url = f"https://api.github.com/repos/{ASSET_REPO}/contents/{repo_path}"
+    api_url = f"https://api.github.com/repos/{asset_repo}/contents/{repo_path}"
     headers = {
-        "Authorization": f"Bearer {ASSET_TOKEN}",
+        "Authorization": f"Bearer {asset_token}",
         "Accept": "application/vnd.github+json",
     }
     payload = {
         "message": f"Add thumbnail {filename}",
         "content": content_b64,
-        "branch": ASSET_BRANCH,
+        "branch": asset_branch,
     }
+
+    # Diagnostic info - safe to print (no token contents, just its length,
+    # which reveals whitespace/formatting issues without exposing the secret).
+    print(f"[debug] ASSET_REPO = '{asset_repo}' (length {len(asset_repo)})")
+    print(f"[debug] ASSET_BRANCH = '{asset_branch}'")
+    print(f"[debug] ASSET_TOKEN length = {len(asset_token)} chars, starts with '{asset_token[:8]}...'")
+    print(f"[debug] Request URL = {api_url}")
+
     response = requests.put(api_url, headers=headers, json=payload)
     if response.status_code not in (200, 201):
         raise Exception(f"Public asset upload failed: {response.status_code} {response.text}")
 
-    raw_url = f"https://raw.githubusercontent.com/{ASSET_REPO}/{ASSET_BRANCH}/{repo_path}"
+    raw_url = f"https://raw.githubusercontent.com/{asset_repo}/{asset_branch}/{repo_path}"
     print(f"Image uploaded publicly: {raw_url}")
     return raw_url
 
