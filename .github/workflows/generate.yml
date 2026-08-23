@@ -3,10 +3,11 @@ permissions:
   contents: write
 on:
   schedule:
-    - cron: "0 9 * * *"
-    - cron: "0 14 * * *"
-    - cron: "0 18 * * *"
-    - cron: "0 22 * * *"
+    # 4 times a day, spread across peak online-shopping/browsing hours (UTC)
+    - cron: "0 9 * * *"   # ~morning
+    - cron: "0 14 * * *"  # ~lunch
+    - cron: "0 18 * * *"  # ~evening
+    - cron: "0 22 * * *"  # ~night
   workflow_dispatch:
 jobs:
   generate:
@@ -27,6 +28,10 @@ jobs:
           SELLAPP_STORE_ID: ${{ secrets.SELLAPP_STORE_ID }}
           ASSET_TOKEN: ${{ secrets.ASSET_TOKEN }}
           ASSET_REPO: ${{ secrets.ASSET_REPO }}
+          BUFFER_API_KEY: ${{ secrets.BUFFER_API_KEY }}
+          BUFFER_PINTEREST_CHANNEL_ID: ${{ secrets.BUFFER_PINTEREST_CHANNEL_ID }}
+          BUFFER_PINTEREST_BOARD_ID: ${{ secrets.BUFFER_PINTEREST_BOARD_ID }}
+          STORE_DOMAIN: ${{ secrets.STORE_DOMAIN }}
         run: python main.py
       - name: Commit updated tracking files
         run: |
