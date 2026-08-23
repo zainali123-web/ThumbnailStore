@@ -33,7 +33,17 @@ ASSET_TOKEN = os.environ.get("ASSET_TOKEN")
 ASSET_REPO = os.environ.get("ASSET_REPO")     # e.g. "zainali123-web/thumbnail-assets"
 ASSET_BRANCH = os.environ.get("ASSET_BRANCH", "main")
 
+# Used to auto-post each new thumbnail to Pinterest via Buffer, and to link
+# each pin back to the actual Sell.app product page.
+BUFFER_API_KEY = os.environ.get("BUFFER_API_KEY")
+BUFFER_PINTEREST_CHANNEL_ID = os.environ.get("BUFFER_PINTEREST_CHANNEL_ID")
+BUFFER_PINTEREST_BOARD_ID = os.environ.get("BUFFER_PINTEREST_BOARD_ID")
+STORE_DOMAIN = os.environ.get("STORE_DOMAIN")   # e.g. "yourstore.sell.app"
+
+PIN_SIZE = (1000, 1500)  # Pinterest's recommended 2:3 vertical ratio
+
 FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+FONT_REGULAR = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -174,6 +184,202 @@ def upload_image_publicly(image_path):
     return raw_url
 
 
+def _wrap_text(draw, text, font, max_width):
+    """Simple word-wrap helper: splits text into lines that fit max_width."""
+    words = text.split(" ")
+    lines, current = [], ""
+    for word in words:
+        trial = f"{current} {word}".strip()
+        if draw.textlength(trial, font=font) <= max_width:
+            current = trial
+        else:
+            if current:
+                lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+    return lines
+
+
+def generate_pinterest_pin(thumbnail_path, headline, accent_hex, output_path):
+    """
+    Builds a vertical Pinterest pin graphic: the thumbnail on top, then
+    price/stock/payment info below, laid out left/right, ending in a
+    call-to-action bar. This is a separate image from the product thumbnail
+    itself - Pinterest strongly favors tall pins over the landscape 16:9
+    thumbnail format. Height is computed from actual content so there's no
+    dead space before the CTA bar.
+    """
+    pin_w = PIN_SIZE[0]
+    top_h = int(pin_w * 0.5)  # thumbnail strip height
+
+    thumb = Image.open(thumbnail_path).convert("RGB")
+    scale = pin_w / thumb.width
+    thumb = thumb.resize((pin_w, int(thumb.height * scale)), Image.LANCZOS)
+    if thumb.height > top_h:
+        top = (thumb.height - top_h) // 2
+        thumb = thumb.crop((0, top, pin_w, top + top_h))
+    else:
+        top_h = thumb.height
+
+    # Tall scratch canvas to draw on, cropped to actual content height at the end
+    scratch_h = PIN_SIZE[0] * 3
+    pin = Image.new("RGB", (pin_w, scratch_h), "white")
+    pin.paste(thumb, (0, 0))
+
+    draw = ImageDraw.Draw(pin)
+    font_price = ImageFont.truetype(FONT_BOLD, 90)
+    font_label = ImageFont.truetype(FONT_BOLD, 30)
+    font_body = ImageFont.truetype(FONT_REGULAR, 26)
+    font_small = ImageFont.truetype(FONT_REGULAR, 22)
+    font_cta = ImageFont.truetype(FONT_BOLD, 48)
+
+    # --- limited stock badge, top-right of the thumbnail ---
+    badge_text = "LIMITED STOCK"
+    badge_w = draw.textlength(badge_text, font=font_label) + 40
+    draw.rectangle([pin_w - badge_w - 30, 30, pin_w - 30, 90], fill="#D8362A")
+    draw.text((pin_w - badge_w - 10, 42), badge_text, font=font_label, fill="white")
+
+    y = top_h + 50
+
+    # --- price ---
+    draw.text((50, y), "$5", font=font_price, fill="black")
+    draw.text((210, y + 34), "instant download", font=font_body, fill="#555555")
+    y += 150
+
+    # --- left/right info cards: crypto only | pay with card ---
+    card_top = y
+    card_h = 110
+    card_w = (pin_w - 120) // 2
+    draw.rectangle([50, card_top, 50 + card_w, card_top + card_h], outline="#DDDDDD", width=2)
+    draw.text((50 + 24, card_top + 20), "CRYPTO ONLY", font=font_label, fill="black")
+    draw.text((50 + 24, card_top + 62), "accepted payment", font=font_small, fill="#777777")
+
+    right_x = 50 + card_w + 20
+    draw.rectangle([right_x, card_top, right_x + card_w, card_top + card_h], outline=accent_hex, width=2)
+    draw.text((right_x + 24, card_top + 20), "PAY WITH CARD", font=font_label, fill="black")
+    draw.text((right_x + 24, card_top + 62), "via MoonPay - see below", font=font_small, fill="#777777")
+    y = card_top + card_h + 60
+
+    # --- 3 steps: how to pay with card using MoonPay ---
+    draw.text((50, y), "How to pay with card:", font=font_label, fill="black")
+    y += 60
+    steps = [
+        "1. Buy SOL with your card on MoonPay",
+        "2. Send the SOL to our wallet address",
+        "3. Get your instant download",
+    ]
+    for step in steps:
+        for line in _wrap_text(draw, step, font_body, pin_w - 100):
+            draw.text((50, y), line, font=font_body, fill="#333333")
+            y += 38
+        y += 12
+
+    # --- bottom CTA bar, positioned right after the content (no gap) ---
+    cta_h = 130
+    cta_top = y + 30
+    draw.rectangle([0, cta_top, pin_w, cta_top + cta_h], fill=accent_hex)
+    cta_text = "Shop now"
+    cta_w = draw.textlength(cta_text, font=font_cta)
+    draw.text(((pin_w - cta_w) / 2, cta_top + (cta_h - 48) / 2), cta_text, font=font_cta, fill="white")
+
+    final_h = cta_top + cta_h
+    pin = pin.crop((0, 0, pin_w, final_h))
+    pin.save(output_path, quality=95)
+    return output_path
+
+
+def build_pinterest_copy(headline_display):
+    """
+    SEO-oriented title + description for the Pinterest post. Per current
+    Pinterest SEO guidance: keyword-rich title/description carry the
+    ranking weight, not hashtags - so hashtags are kept to 1-2 at the very
+    end rather than stuffed throughout.
+    """
+    title = f"{headline_display.title()} - YouTube Thumbnail Template | High CTR Clickbait Design"
+    description = (
+        f"\"{headline_display.title()}\" YouTube thumbnail template - a high-converting, "
+        "ready-to-use clickbait-style design made for content creators, vloggers, and "
+        "video editors who want more clicks. Instant digital download, 1280x720 "
+        "YouTube-standard size. #youtubethumbnail #thumbnaildesign"
+    )
+    return title, description
+
+
+def get_product_url(product, slug_fallback=None):
+    """
+    Best-effort extraction of the live product page URL from Sell.app's
+    product creation response. Field name isn't confirmed against Sell.app's
+    schema, so this tries a few likely candidates and falls back to the
+    store homepage rather than failing the whole run if none match.
+    """
+    data = (product or {}).get("data", {})
+    for key in ("url", "permalink", "product_url"):
+        if data.get(key):
+            return data[key]
+    slug = data.get("slug") or slug_fallback
+    if STORE_DOMAIN and slug:
+        return f"https://{STORE_DOMAIN}/product/{slug}"
+    if STORE_DOMAIN:
+        return f"https://{STORE_DOMAIN}"
+    return None
+
+
+def post_to_buffer_pinterest(image_url, title, description, link):
+    """
+    Posts the pin to Pinterest via Buffer's API (createPost mutation),
+    using addToQueue so it goes out on Buffer's normal posting schedule
+    rather than all at once.
+    """
+    if not BUFFER_API_KEY or not BUFFER_PINTEREST_CHANNEL_ID or not BUFFER_PINTEREST_BOARD_ID:
+        print("Buffer/Pinterest not configured - skipping Pinterest post.")
+        return None
+
+    query = """
+    mutation CreatePin($input: CreatePostInput!) {
+      createPost(input: $input) {
+        ... on PostActionSuccess {
+          post { id dueAt }
+        }
+        ... on MutationError {
+          message
+        }
+      }
+    }
+    """
+    variables = {
+        "input": {
+            "text": description,
+            "channelId": BUFFER_PINTEREST_CHANNEL_ID,
+            "schedulingType": "automatic",
+            "mode": "addToQueue",
+            "assets": [{"image": {"url": image_url}}],
+            "metadata": {
+                "pinterest": {
+                    "title": title,
+                    "url": link,
+                    "boardServiceId": BUFFER_PINTEREST_BOARD_ID,
+                }
+            },
+        }
+    }
+    response = requests.post(
+        "https://api.buffer.com",
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {BUFFER_API_KEY}",
+        },
+        json={"query": query, "variables": variables},
+    )
+    result = response.json()
+    errors = result.get("data", {}).get("createPost", {}).get("message")
+    if errors:
+        print(f"Buffer/Pinterest post failed: {errors}")
+        return None
+    print("Pin queued on Pinterest via Buffer.")
+    return result
+
+
 def create_sellapp_product(title, description):
     """STEP A: Create base product"""
     url = "https://sell.app/api/v2/products"
@@ -256,15 +462,28 @@ def create_sellapp_variant(product_id, price_cents, image_url):
     return variant
 
 
-def create_full_sellapp_listing(title, description, price_cents, image_path):
-    """Combines: upload image publicly -> create product -> create variant"""
+def create_full_sellapp_listing(title, description, price_cents, image_path, headline_display, accent_hex):
+    """Combines: upload image publicly -> create product -> create variant -> post pin to Pinterest"""
     image_url = upload_image_publicly(image_path)
     product = create_sellapp_product(title, description)
     if not product or "data" not in product or "id" not in product["data"]:
         print("Skipping variant creation - product creation did not return a valid ID.")
         return None
     product_id = product["data"]["id"]
-    return create_sellapp_variant(product_id, price_cents, image_url)
+    variant = create_sellapp_variant(product_id, price_cents, image_url)
+
+    product_url = get_product_url(product)
+    if product_url:
+        print("Creating Pinterest pin...")
+        pin_path = os.path.join(OUTPUT_DIR, f"pin_{os.path.basename(image_path)}")
+        generate_pinterest_pin(image_path, headline_display, accent_hex, pin_path)
+        pin_image_url = upload_image_publicly(pin_path)
+        pin_title, pin_description = build_pinterest_copy(headline_display)
+        post_to_buffer_pinterest(pin_image_url, pin_title, pin_description, product_url)
+    else:
+        print("No product URL available (STORE_DOMAIN not set) - skipping Pinterest post.")
+
+    return variant
 
 
 def get_and_increment_run_count():
@@ -301,7 +520,7 @@ def main():
         "Keywords: youtube thumbnail template, clickbait thumbnail, thumbnail design, content creator template, "
         "video thumbnail, high CTR thumbnail, youtube graphics."
     )
-    create_full_sellapp_listing(title, description, SINGLE_PRICE_CENTS, output_path)
+    create_full_sellapp_listing(title, description, SINGLE_PRICE_CENTS, output_path, headline_display, topic["accent_color"])
 
     run_count = get_and_increment_run_count()
     RUNS_PER_DAY = 4
@@ -315,7 +534,7 @@ def main():
             "A bundle of 16 professional YouTube thumbnail templates at a "
             "discounted price. High-resolution, instantly downloadable."
         )
-        create_full_sellapp_listing(bundle_title, bundle_description, BUNDLE_PRICE_CENTS, output_path)
+        create_full_sellapp_listing(bundle_title, bundle_description, BUNDLE_PRICE_CENTS, output_path, headline_display, topic["accent_color"])
 
     print("Done.")
 
