@@ -10,6 +10,9 @@ also creates a bundle listing.
 import os
 import json
 import random
+import re
+import time
+import datetime
 import requests
 from PIL import Image, ImageDraw, ImageFont, ImageEnhance
 
@@ -24,6 +27,17 @@ BUNDLE_PRICE_CENTS = 3000    # $30.00
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 SELLAPP_API_KEY = os.environ.get("SELLAPP_API_KEY")
 SELLAPP_STORE_ID = os.environ.get("SELLAPP_STORE_ID")
+
+# Used to pull today's real trending YouTube topics instead of cycling a
+# fixed static list - see fetch_trending_topic(). Falls back to
+# TOPICS_FILE below if this isn't set or the API call fails.
+YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY")
+TRENDING_USED_FILE = "trending_used.json"
+# A handful of category IDs to pull from so results aren't just Music/
+# Movies/Gaming (YouTube narrowed the general "mostPopular" chart to just
+# those three in July 2025). None = the general chart.
+TRENDING_CATEGORY_IDS = [None, "26", "28", "22", "27", "24"]
+ACCENT_COLORS = ["#3355AA", "#D8362A", "#1E9E62", "#8B3FD1"]  # rotates daily
 
 # Used to host generated thumbnails at a public URL so Sell.app's "Manual"
 # deliverable (a link/comment shown to the buyer) can point somewhere real.
@@ -48,7 +62,108 @@ FONT_REGULAR = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
+STOPWORDS = {
+    "the", "a", "an", "how", "to", "this", "i", "my", "is", "of", "in", "on",
+    "for", "with", "and", "you", "your", "we", "our", "vs", "official",
+    "video", "new", "it", "at", "be", "so", "just", "me", "that",
+}
+
+
+_TRAILING_TRIM = {"for", "and", "or", "the", "a", "an", "to", "with", "in", "on", "of", "at", "so", "but"}
+
+
+def _clean_headline(title):
+    """Turns a raw video title into a short, thumbnail-style ALL CAPS
+    headline: strips channel-branding suffixes and bracketed tags, trims
+    to a punchy length, and avoids ending on a dangling connector word."""
+    title = title.split("|")[0]
+    title = re.sub(r"[\(\[].*?[\)\]]", "", title)
+    title = title.strip(" -:\u2013\u2014")
+    words = title.split()[:6]
+    while words and words[-1].lower() in _TRAILING_TRIM:
+        words.pop()
+    return " ".join(words).upper() if words else "TRENDING NOW"
+
+
+def _extract_keyword(title):
+    """Pulls a short, stopword-free phrase from the title to use as the
+    Pexels stock-photo search query."""
+    words = [w.strip(".,!?:;\"'()[]") for w in title.split()]
+    significant = [w for w in words if w.lower() not in STOPWORDS and len(w) > 2]
+    return " ".join(significant[:3]) if significant else "youtube trending"
+
+
+def fetch_trending_topic():
+    """
+    Pulls today's trending YouTube videos across a few categories, picks
+    one not already used today, and derives a thumbnail headline + a
+    Pexels search keyword from it. Returns None (triggering the static
+    topics_database.json fallback in get_next_topic) if YOUTUBE_API_KEY
+    isn't set, the request fails, or every trending video today has
+    already been used.
+    """
+    if not YOUTUBE_API_KEY:
+        print("YOUTUBE_API_KEY not set - falling back to static topics database.")
+        return None
+
+    today = datetime.date.today().isoformat()
+    used = {}
+    if os.path.exists(TRENDING_USED_FILE):
+        with open(TRENDING_USED_FILE, "r") as f:
+            used = json.load(f)
+    used_today = set(used.get(today, []))
+
+    candidates = []
+    for category_id in TRENDING_CATEGORY_IDS:
+        params = {
+            "part": "snippet",
+            "chart": "mostPopular",
+            "regionCode": "US",
+            "maxResults": 15,
+            "key": YOUTUBE_API_KEY,
+        }
+        if category_id:
+            params["videoCategoryId"] = category_id
+        try:
+            response = requests.get(
+                "https://www.googleapis.com/youtube/v3/videos", params=params, timeout=15
+            )
+            response.raise_for_status()
+            items = response.json().get("items", [])
+        except Exception as e:
+            print(f"YouTube trending fetch failed for category {category_id}: {e}")
+            continue
+        for item in items:
+            vid = item.get("id")
+            title = item.get("snippet", {}).get("title")
+            if vid and title and vid not in used_today:
+                candidates.append((vid, title))
+
+    if not candidates:
+        print("No unused trending videos found today - falling back to static topics database.")
+        return None
+
+    video_id, title = random.choice(candidates)
+    print(f"Trending topic: {title}")
+
+    used.setdefault(today, []).append(video_id)
+    used = dict(sorted(used.items())[-14:])  # keep ~2 weeks of history, no more
+    with open(TRENDING_USED_FILE, "w") as f:
+        json.dump(used, f, indent=2)
+
+    return {
+        "id": video_id,
+        "headline": _clean_headline(title),
+        "keyword": _extract_keyword(title),
+        "accent_color": random.choice(ACCENT_COLORS),
+    }
+
+
 def get_next_topic():
+    trending = fetch_trending_topic()
+    if trending:
+        return trending
+
     with open(TOPICS_FILE, "r") as f:
         data = json.load(f)
     unused = [t for t in data["topics"] if not t["used"]]
@@ -159,7 +274,8 @@ def upload_image_publicly(image_path):
     asset_branch = ASSET_BRANCH.strip()
 
     filename = os.path.basename(image_path)
-    repo_path = f"images/{filename}"
+    unique_prefix = str(int(time.time() * 1000))
+    repo_path = f"images/{unique_prefix}_{filename}"
 
     with open(image_path, "rb") as f:
         content_b64 = base64.b64encode(f.read()).decode("utf-8")
