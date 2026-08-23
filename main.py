@@ -488,10 +488,20 @@ def post_to_buffer_pinterest(image_url, title, description, link):
         json={"query": query, "variables": variables},
     )
     result = response.json()
-    errors = result.get("data", {}).get("createPost", {}).get("message")
-    if errors:
-        print(f"Buffer/Pinterest post failed: {errors}")
+    print(f"[debug] Buffer response: {json.dumps(result)[:2000]}")
+
+    top_level_errors = result.get("errors")
+    if top_level_errors:
+        print(f"Buffer/Pinterest post failed (API-level error): {top_level_errors}")
         return None
+
+    data = result.get("data") or {}
+    create_post = data.get("createPost") or {}
+    message = create_post.get("message")
+    if message:
+        print(f"Buffer/Pinterest post failed: {message}")
+        return None
+
     print("Pin queued on Pinterest via Buffer.")
     return result
 
@@ -590,12 +600,17 @@ def create_full_sellapp_listing(title, description, price_cents, image_path, hea
 
     product_url = get_product_url(product)
     if product_url:
-        print("Creating Pinterest pin...")
-        pin_path = os.path.join(OUTPUT_DIR, f"pin_{os.path.basename(image_path)}")
-        generate_pinterest_pin(image_path, headline_display, accent_hex, pin_path)
-        pin_image_url = upload_image_publicly(pin_path)
-        pin_title, pin_description = build_pinterest_copy(headline_display)
-        post_to_buffer_pinterest(pin_image_url, pin_title, pin_description, product_url)
+        try:
+            print("Creating Pinterest pin...")
+            pin_path = os.path.join(OUTPUT_DIR, f"pin_{os.path.basename(image_path)}")
+            generate_pinterest_pin(image_path, headline_display, accent_hex, pin_path)
+            pin_image_url = upload_image_publicly(pin_path)
+            pin_title, pin_description = build_pinterest_copy(headline_display)
+            post_to_buffer_pinterest(pin_image_url, pin_title, pin_description, product_url)
+        except Exception as e:
+            # Pinterest/Buffer is a marketing nice-to-have - never let a
+            # failure here crash the run or block the tracking-file commit.
+            print(f"Pinterest posting failed (non-fatal, continuing): {e}")
     else:
         print("No product URL available (STORE_DOMAIN not set) - skipping Pinterest post.")
 
