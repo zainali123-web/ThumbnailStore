@@ -451,6 +451,14 @@ def post_to_buffer_pinterest(image_url, title, description, link):
         print("Buffer/Pinterest not configured - skipping Pinterest post.")
         return None
 
+    # Defensive: strip accidental whitespace/newlines from copy-pasted secret
+    # values - this exact class of bug (extra chars breaking an ID) already
+    # bit us once with ASSET_REPO.
+    channel_id = BUFFER_PINTEREST_CHANNEL_ID.strip()
+    board_id = BUFFER_PINTEREST_BOARD_ID.strip()
+    print(f"[debug] channelId length = {len(channel_id)} (expect 24 for a Buffer channel id)")
+    print(f"[debug] boardId length = {len(board_id)}")
+
     query = """
     mutation CreatePin($input: CreatePostInput!) {
       createPost(input: $input) {
@@ -466,7 +474,7 @@ def post_to_buffer_pinterest(image_url, title, description, link):
     variables = {
         "input": {
             "text": description,
-            "channelId": BUFFER_PINTEREST_CHANNEL_ID,
+            "channelId": channel_id,
             "schedulingType": "automatic",
             "mode": "addToQueue",
             "assets": [{"image": {"url": image_url}}],
@@ -474,7 +482,7 @@ def post_to_buffer_pinterest(image_url, title, description, link):
                 "pinterest": {
                     "title": title,
                     "url": link,
-                    "boardServiceId": BUFFER_PINTEREST_BOARD_ID,
+                    "boardServiceId": board_id,
                 }
             },
         }
