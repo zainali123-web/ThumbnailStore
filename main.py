@@ -36,7 +36,7 @@ TRENDING_USED_FILE = "trending_used.json"
 # A handful of category IDs to pull from so results aren't just Music/
 # Movies/Gaming (YouTube narrowed the general "mostPopular" chart to just
 # those three in July 2025). None = the general chart.
-TRENDING_CATEGORY_IDS = [None, "26", "28", "22", "27", "24"]
+TRENDING_CATEGORY_IDS = [None, "26", "28", "22", "24"]  # 27 (Education) 404s for this chart/region, dropped
 ACCENT_COLORS = ["#3355AA", "#D8362A", "#1E9E62", "#8B3FD1"]  # rotates daily
 
 # Used to host generated thumbnails at a public URL so Sell.app's "Manual"
@@ -300,6 +300,14 @@ def upload_image_publicly(image_path):
     return raw_url
 
 
+def smart_title(text):
+    """Like str.title(), but doesn't mangle apostrophes (str.title() turns
+    "lock's" into "Lock'S" because it treats the apostrophe as a word
+    boundary). Only capitalizes the first letter of each space-separated
+    word instead."""
+    return " ".join(w[:1].upper() + w[1:].lower() if w else w for w in text.split(" "))
+
+
 def _wrap_text(draw, text, font, max_width):
     """Simple word-wrap helper: splits text into lines that fit max_width."""
     words = text.split(" ")
@@ -412,9 +420,9 @@ def build_pinterest_copy(headline_display):
     ranking weight, not hashtags - so hashtags are kept to 1-2 at the very
     end rather than stuffed throughout.
     """
-    title = f"{headline_display.title()} - YouTube Thumbnail Template | High CTR Clickbait Design"
+    title = f"{smart_title(headline_display)} - YouTube Thumbnail Template | High CTR Clickbait Design"
     description = (
-        f"\"{headline_display.title()}\" YouTube thumbnail template - a high-converting, "
+        f"\"{smart_title(headline_display)}\" YouTube thumbnail template - a high-converting, "
         "ready-to-use clickbait-style design made for content creators, vloggers, and "
         "video editors who want more clicks. Instant digital download, 1280x720 "
         "YouTube-standard size. #youtubethumbnail #thumbnaildesign"
@@ -607,6 +615,7 @@ def create_full_sellapp_listing(title, description, price_cents, image_path, hea
     variant = create_sellapp_variant(product_id, price_cents, image_url)
 
     product_url = get_product_url(product)
+    print(f"[debug] product_url for Pinterest link = {product_url}")
     if product_url:
         try:
             print("Creating Pinterest pin...")
@@ -650,7 +659,7 @@ def main():
     create_thumbnail(bg_path, topic["headline"], topic["accent_color"], output_path)
 
     print("Uploading to Sell.app...")
-    title = f"YouTube Thumbnail Template | Clickbait Design | {headline_display.title()} | High CTR"
+    title = f"YouTube Thumbnail Template | Clickbait Design | {smart_title(headline_display)} | High CTR"
     description = (
         "Professional, ready-to-use YouTube thumbnail template designed for high click-through rate (CTR). "
         "Perfect for YouTubers, content creators, vloggers, and video editors who want eye-catching, "
