@@ -36,7 +36,10 @@ TRENDING_USED_FILE = "trending_used.json"
 # A handful of category IDs to pull from so results aren't just Music/
 # Movies/Gaming (YouTube narrowed the general "mostPopular" chart to just
 # those three in July 2025). None = the general chart.
-TRENDING_CATEGORY_IDS = [None, "26", "28", "22", "24"]  # 27 (Education) 404s for this chart/region, dropped
+TRENDING_CATEGORY_IDS = ["26", "28", "22", "24"]  # Howto&Style, Science&Tech, People&Blogs, Entertainment
+# Dropped: None/general (now Music/Movies/Gaming only, since YouTube's July
+# 2025 change - not a fit for clickbait vlog/how-to style thumbnails).
+# Dropped: 27 (Education) - 404s for this chart/region combo.
 ACCENT_COLORS = ["#3355AA", "#D8362A", "#1E9E62", "#8B3FD1"]  # rotates daily
 
 # Used to host generated thumbnails at a public URL so Sell.app's "Manual"
@@ -93,6 +96,20 @@ def _extract_keyword(title):
     return " ".join(significant[:3]) if significant else "youtube trending"
 
 
+_MUSIC_MARKERS = (
+    "official video", "official music video", "lyric video", "lyrics",
+    "official audio", "video oficial", "official mv", "audio oficial",
+    " ft.", " feat.", "(mv)",
+)
+
+
+def _looks_like_music_video(title):
+    """Filters out music tracks that slip through even from non-music
+    categories - not a fit for a clickbait vlog/how-to thumbnail store."""
+    t = title.lower()
+    return any(marker in t for marker in _MUSIC_MARKERS)
+
+
 def fetch_trending_topic():
     """
     Pulls today's trending YouTube videos across a few categories, picks
@@ -136,7 +153,7 @@ def fetch_trending_topic():
         for item in items:
             vid = item.get("id")
             title = item.get("snippet", {}).get("title")
-            if vid and title and vid not in used_today:
+            if vid and title and vid not in used_today and not _looks_like_music_video(title):
                 candidates.append((vid, title))
 
     if not candidates:
