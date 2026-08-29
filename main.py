@@ -54,7 +54,18 @@ ASSET_BRANCH = os.environ.get("ASSET_BRANCH", "main")
 # each pin back to the actual Sell.app product page.
 BUFFER_API_KEY = os.environ.get("BUFFER_API_KEY")
 BUFFER_PINTEREST_CHANNEL_ID = os.environ.get("BUFFER_PINTEREST_CHANNEL_ID")
-BUFFER_PINTEREST_BOARD_ID = os.environ.get("BUFFER_PINTEREST_BOARD_ID")
+BUFFER_PINTEREST_BOARD_ID = os.environ.get("BUFFER_PINTEREST_BOARD_ID")  # fallback/default board
+
+# One board per trending category, so pins land on a topically-focused
+# board instead of a single generic one (better Pinterest SEO - boards are
+# "topical signals" to Pinterest's algorithm). Falls back to
+# BUFFER_PINTEREST_BOARD_ID above if a specific one isn't set.
+BUFFER_BOARD_BY_CATEGORY = {
+    "26": os.environ.get("BUFFER_BOARD_HOWTO"),          # Howto & Style
+    "28": os.environ.get("BUFFER_BOARD_TECH"),           # Science & Technology
+    "22": os.environ.get("BUFFER_BOARD_PEOPLE"),         # People & Blogs
+    "24": os.environ.get("BUFFER_BOARD_ENTERTAINMENT"),  # Entertainment
+}
 STORE_DOMAIN = os.environ.get("STORE_DOMAIN")   # e.g. "yourstore.sell.app"
 
 PIN_SIZE = (1000, 1500)  # Pinterest's recommended 2:3 vertical ratio
@@ -154,13 +165,13 @@ def fetch_trending_topic():
             vid = item.get("id")
             title = item.get("snippet", {}).get("title")
             if vid and title and vid not in used_today and not _looks_like_music_video(title):
-                candidates.append((vid, title))
+                candidates.append((vid, title, category_id))
 
     if not candidates:
         print("No unused trending videos found today - falling back to static topics database.")
         return None
 
-    video_id, title = random.choice(candidates)
+    video_id, title, category_id = random.choice(candidates)
     print(f"Trending topic: {title}")
 
     used.setdefault(today, []).append(video_id)
@@ -173,6 +184,7 @@ def fetch_trending_topic():
         "headline": _clean_headline(title),
         "keyword": _extract_keyword(title),
         "accent_color": random.choice(ACCENT_COLORS),
+        "category_id": category_id,
     }
 
 
@@ -194,6 +206,7 @@ def get_next_topic():
             t["used"] = True
     with open(TOPICS_FILE, "w") as f:
         json.dump(data, f, indent=2)
+    topic.setdefault("category_id", None)
     return topic
 
 
@@ -466,13 +479,15 @@ def get_product_url(product, slug_fallback=None):
     return None
 
 
-def post_to_buffer_pinterest(image_url, title, description, link):
+def post_to_buffer_pinterest(image_url, title, description, link, category_id=None):
     """
     Posts the pin to Pinterest via Buffer's API (createPost mutation),
     using addToQueue so it goes out on Buffer's normal posting schedule
-    rather than all at once.
+    rather than all at once. Routes to the board matching category_id if
+    one is configured, otherwise falls back to BUFFER_PINTEREST_BOARD_ID.
     """
-    if not BUFFER_API_KEY or not BUFFER_PINTEREST_CHANNEL_ID or not BUFFER_PINTEREST_BOARD_ID:
+    chosen_board = BUFFER_BOARD_BY_CATEGORY.get(category_id) or BUFFER_PINTEREST_BOARD_ID
+    if not BUFFER_API_KEY or not BUFFER_PINTEREST_CHANNEL_ID or not chosen_board:
         print("Buffer/Pinterest not configured - skipping Pinterest post.")
         return None
 
@@ -480,7 +495,8 @@ def post_to_buffer_pinterest(image_url, title, description, link):
     # values - this exact class of bug (extra chars breaking an ID) already
     # bit us once with ASSET_REPO.
     channel_id = BUFFER_PINTEREST_CHANNEL_ID.strip()
-    board_id = BUFFER_PINTEREST_BOARD_ID.strip()
+    board_id = chosen_board.strip()
+    print(f"[debug] using board for category {category_id!r}")
     print(f"[debug] channelId length = {len(channel_id)} (expect 24 for a Buffer channel id)")
     print(f"[debug] boardId length = {len(board_id)}")
 
@@ -621,7 +637,7 @@ def create_sellapp_variant(product_id, price_cents, image_url):
     return variant
 
 
-def create_full_sellapp_listing(title, description, price_cents, image_path, headline_display, accent_hex):
+def create_full_sellapp_listing(title, description, price_cents, image_path, headline_display, accent_hex, category_id=None):
     """Combines: upload image publicly -> create product -> create variant -> post pin to Pinterest"""
     image_url = upload_image_publicly(image_path)
     product = create_sellapp_product(title, description)
@@ -640,7 +656,7 @@ def create_full_sellapp_listing(title, description, price_cents, image_path, hea
             generate_pinterest_pin(image_path, headline_display, accent_hex, pin_path)
             pin_image_url = upload_image_publicly(pin_path)
             pin_title, pin_description = build_pinterest_copy(headline_display)
-            post_to_buffer_pinterest(pin_image_url, pin_title, pin_description, product_url)
+            post_to_buffer_pinterest(pin_image_url, pin_title, pin_description, product_url, category_id)
         except Exception as e:
             # Pinterest/Buffer is a marketing nice-to-have - never let a
             # failure here crash the run or block the tracking-file commit.
@@ -685,7 +701,7 @@ def main():
         "Keywords: youtube thumbnail template, clickbait thumbnail, thumbnail design, content creator template, "
         "video thumbnail, high CTR thumbnail, youtube graphics."
     )
-    create_full_sellapp_listing(title, description, SINGLE_PRICE_CENTS, output_path, headline_display, topic["accent_color"])
+    create_full_sellapp_listing(title, description, SINGLE_PRICE_CENTS, output_path, headline_display, topic["accent_color"], topic.get("category_id"))
 
     run_count = get_and_increment_run_count()
     RUNS_PER_DAY = 4
@@ -699,7 +715,7 @@ def main():
             "A bundle of 16 professional YouTube thumbnail templates at a "
             "discounted price. High-resolution, instantly downloadable."
         )
-        create_full_sellapp_listing(bundle_title, bundle_description, BUNDLE_PRICE_CENTS, output_path, headline_display, topic["accent_color"])
+        create_full_sellapp_listing(bundle_title, bundle_description, BUNDLE_PRICE_CENTS, output_path, headline_display, topic["accent_color"], topic.get("category_id"))
 
     print("Done.")
 
