@@ -603,8 +603,11 @@ def post_to_buffer_pinterest(image_url, title, description, link, category_id=No
 def create_sellapp_product(title, description):
     """STEP A: Create base product"""
     url = "https://sell.app/api/v2/products"
+    # Defensive: strip whitespace/newlines from the API key - the same class
+    # of copy-paste bug that already caused problems with ASSET_TOKEN.
+    api_key = (SELLAPP_API_KEY or "").strip()
     headers = {
-        "Authorization": f"Bearer {SELLAPP_API_KEY}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
     payload = {
@@ -645,8 +648,9 @@ def create_sellapp_variant(product_id, price_cents, image_url):
         the thumbnail goes
     """
     url = f"https://sell.app/api/v2/products/{product_id}/variants"
+    api_key = (SELLAPP_API_KEY or "").strip()
     headers = {
-        "Authorization": f"Bearer {SELLAPP_API_KEY}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
         "Accept": "application/json"
     }
