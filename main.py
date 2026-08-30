@@ -26,6 +26,10 @@ BUNDLE_PRICE_CENTS = 3000    # $30.00
 
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 SELLAPP_API_KEY = os.environ.get("SELLAPP_API_KEY")
+# NOTE: despite the name, this must be your storefront's URL SLUG (e.g. if
+# your store is at "myshop.sell.app", this is "myshop"), NOT a numeric ID -
+# Sell.app's API selects the store via the X-STORE request header using
+# this slug, per their official docs (developer.sell.app/authentication).
 SELLAPP_STORE_ID = os.environ.get("SELLAPP_STORE_ID")
 
 # Used to pull today's real trending YouTube topics instead of cycling a
@@ -342,6 +346,13 @@ def upload_image_publicly(image_path):
     jsdelivr_url = f"https://cdn.jsdelivr.net/gh/{asset_repo}@{commit_sha}/{repo_path}"
 
     _wait_until_url_is_live(jsdelivr_url)
+    # Extra safety margin: our own check only confirms the file is live at
+    # the jsdelivr edge node THAT REQUEST happened to hit - Pinterest's own
+    # fetch (which happens separately, at actual publish time) can land on
+    # a different edge node that hasn't cached it yet. A short flat delay
+    # here gives jsdelivr's network more time to propagate globally before
+    # we hand the URL off to Buffer/Pinterest.
+    time.sleep(15)
 
     print(f"Image uploaded publicly: {jsdelivr_url}")
     return jsdelivr_url
@@ -601,17 +612,28 @@ def post_to_buffer_pinterest(image_url, title, description, link, category_id=No
 
 
 def create_sellapp_product(title, description):
-    """STEP A: Create base product"""
-    url = "https://sell.app/api/v2/products"
+    """STEP A: Create base product.
+
+    Uses /api/v1/ (confirmed via official Sell.app docs at
+    developer.sell.app/authentication - v2 doesn't exist / isn't
+    authenticated the same way, which was the actual cause of the
+    "401 Unauthenticated" errors). Store selection is done via the
+    X-STORE header (the storefront's slug, e.g. "myshop" for
+    myshop.sell.app), NOT a store_id field in the JSON body - also per
+    the official docs example.
+    """
+    url = "https://sell.app/api/v1/products"
     # Defensive: strip whitespace/newlines from the API key - the same class
     # of copy-paste bug that already caused problems with ASSET_TOKEN.
     api_key = (SELLAPP_API_KEY or "").strip()
+    store_slug = (SELLAPP_STORE_ID or "").strip()
     headers = {
         "Authorization": f"Bearer {api_key}",
+        "X-STORE": store_slug,
         "Content-Type": "application/json",
+        "Accept": "application/json",
     }
     payload = {
-        "store_id": SELLAPP_STORE_ID,
         "title": title,
         "description": description,
         "visibility": "PUBLIC",
@@ -647,10 +669,12 @@ def create_sellapp_variant(product_id, price_cents, image_url):
         buyer after purchase - this is where the public download link for
         the thumbnail goes
     """
-    url = f"https://sell.app/api/v2/products/{product_id}/variants"
+    url = f"https://sell.app/api/v1/products/{product_id}/variants"
     api_key = (SELLAPP_API_KEY or "").strip()
+    store_slug = (SELLAPP_STORE_ID or "").strip()
     headers = {
         "Authorization": f"Bearer {api_key}",
+        "X-STORE": store_slug,
         "Content-Type": "application/json",
         "Accept": "application/json"
     }
