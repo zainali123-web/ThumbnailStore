@@ -267,9 +267,17 @@ def create_thumbnail(background_path, headline, accent_hex, output_path):
 def upload_image_publicly(image_path):
     """
     Uploads the generated thumbnail to a separate PUBLIC GitHub repo via
-    GitHub's own Contents API, and returns a public raw.githubusercontent.com
-    URL for it. ThumbnailStore itself stays private; only images go to the
-    public repo, one file per thumbnail.
+    GitHub's own Contents API, and returns a public jsdelivr CDN URL for it
+    (not raw.githubusercontent.com - see note below). ThumbnailStore itself
+    stays private; only images go to the public repo, one file per
+    thumbnail.
+
+    NOTE on jsdelivr vs raw.githubusercontent.com: raw.githubusercontent.com
+    is NOT reliable for third-party services (like Pinterest/Buffer) to
+    fetch from - it can take anywhere from a few seconds to ~1 minute to
+    propagate a brand-new file across GitHub's CDN, and content-type
+    headers are inconsistent. jsdelivr's GitHub mirror (cdn.jsdelivr.net/gh/)
+    is built specifically for hot-linking and is what we use instead.
 
     One-time setup needed (not per-run - do this once):
       1. Create a new PUBLIC repo, e.g. "thumbnail-assets", under the same
@@ -325,9 +333,46 @@ def upload_image_publicly(image_path):
     if response.status_code not in (200, 201):
         raise Exception(f"Public asset upload failed: {response.status_code} {response.text}")
 
-    raw_url = f"https://raw.githubusercontent.com/{asset_repo}/{asset_branch}/{repo_path}"
-    print(f"Image uploaded publicly: {raw_url}")
-    return raw_url
+    commit_sha = response.json().get("commit", {}).get("sha", asset_branch)
+    # Pin to the exact commit SHA (not the branch name) - jsdelivr caches
+    # branch-based URLs aggressively and can keep serving 404/stale content
+    # for a brand-new file; a SHA-pinned URL is always correct on first
+    # fetch since that exact SHA+path combination has never been requested
+    # (and therefore never cached) before.
+    jsdelivr_url = f"https://cdn.jsdelivr.net/gh/{asset_repo}@{commit_sha}/{repo_path}"
+
+    _wait_until_url_is_live(jsdelivr_url)
+
+    print(f"Image uploaded publicly: {jsdelivr_url}")
+    return jsdelivr_url
+
+
+def _wait_until_url_is_live(url, attempts=8, delay_seconds=4):
+    """
+    Polls a freshly-uploaded asset URL until it actually returns a real
+    image (not a 404/placeholder), so we never hand Buffer/Pinterest a URL
+    that isn't fetchable yet. jsdelivr fetches a file from GitHub on its
+    OWN first request and caches it - so the very first request can still
+    404 while that fetch happens; this loop specifically covers that gap
+    (this was the root cause of the "Pinterest is hitting some snags with
+    the Source URL" publish failures). Doesn't raise on final failure -
+    lets the caller's Pinterest post attempt fail naturally with a clear
+    error message instead of crashing the whole run.
+    """
+    for attempt in range(1, attempts + 1):
+        try:
+            resp = requests.get(url, timeout=15)
+            content_type = resp.headers.get("Content-Type", "")
+            if resp.status_code == 200 and content_type.startswith("image/"):
+                print(f"[debug] Asset URL confirmed live after {attempt} attempt(s).")
+                return True
+            print(f"[debug] Asset not live yet (attempt {attempt}/{attempts}): "
+                  f"status={resp.status_code} content-type={content_type!r}")
+        except requests.RequestException as e:
+            print(f"[debug] Asset check failed (attempt {attempt}/{attempts}): {e}")
+        time.sleep(delay_seconds)
+    print(f"[debug] WARNING: asset URL still not confirmed live after {attempts} attempts: {url}")
+    return False
 
 
 def smart_title(text):
