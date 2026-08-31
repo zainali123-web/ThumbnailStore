@@ -346,11 +346,13 @@ def upload_image_publicly(image_path):
     _wait_until_url_is_live(jsdelivr_url)
     # Extra safety margin: our own check only confirms the file is live at
     # the jsdelivr edge node THAT REQUEST happened to hit - Pinterest's own
-    # fetch (which happens separately, at actual publish time) can land on
-    # a different edge node that hasn't cached it yet. A short flat delay
-    # here gives jsdelivr's network more time to propagate globally before
-    # we hand the URL off to Buffer/Pinterest.
-    time.sleep(15)
+    # fetch (which happens separately, at actual publish time, possibly
+    # from a completely different geographic region) can land on a
+    # different edge node that hasn't cached it yet. Bumped from 15s to 45s
+    # after seeing the "Source URL" publish failure recur even with the
+    # shorter delay - gives jsdelivr's network more time to propagate
+    # globally before we hand the URL off to Buffer/Pinterest.
+    time.sleep(45)
 
     print(f"Image uploaded publicly: {jsdelivr_url}")
     return jsdelivr_url
@@ -535,10 +537,15 @@ def get_product_url(product, slug_fallback=None):
 
 def post_to_buffer_pinterest(image_url, title, description, link, category_id=None):
     """
-    Posts the pin to Pinterest via Buffer's API (createPost mutation),
-    using addToQueue so it goes out on Buffer's normal posting schedule
-    rather than all at once. Routes to the board matching category_id if
-    one is configured, otherwise falls back to BUFFER_PINTEREST_BOARD_ID.
+    Posts the pin to Pinterest via Buffer's API (createPost mutation).
+    Uses customScheduled with an explicit dueAt ~10 minutes in the future
+    (rather than addToQueue/automatic, which can pick a slot mere seconds
+    away) - this guarantees jsdelivr's CDN has real time to propagate the
+    image globally before Pinterest's own crawler attempts to fetch it at
+    publish time, which is what was causing intermittent "Source URL"
+    publish failures even with an upload-time verification + delay.
+    Routes to the board matching category_id if one is configured,
+    otherwise falls back to BUFFER_PINTEREST_BOARD_ID.
     """
     chosen_board = BUFFER_BOARD_BY_CATEGORY.get(category_id) or BUFFER_PINTEREST_BOARD_ID
     if not BUFFER_API_KEY or not BUFFER_PINTEREST_CHANNEL_ID or not chosen_board:
@@ -553,6 +560,11 @@ def post_to_buffer_pinterest(image_url, title, description, link, category_id=No
     print(f"[debug] using board for category {category_id!r}")
     print(f"[debug] channelId length = {len(channel_id)} (expect 24 for a Buffer channel id)")
     print(f"[debug] boardId length = {len(board_id)}")
+
+    due_at = (datetime.datetime.utcnow() + datetime.timedelta(minutes=10)).strftime(
+        "%Y-%m-%dT%H:%M:%S.000Z"
+    )
+    print(f"[debug] scheduling pin for {due_at} (10 min from now, not immediate)")
 
     query = """
     mutation CreatePin($input: CreatePostInput!) {
@@ -571,7 +583,8 @@ def post_to_buffer_pinterest(image_url, title, description, link, category_id=No
             "text": description,
             "channelId": channel_id,
             "schedulingType": "automatic",
-            "mode": "addToQueue",
+            "mode": "customScheduled",
+            "dueAt": due_at,
             "assets": [{"image": {"url": image_url}}],
             "metadata": {
                 "pinterest": {
