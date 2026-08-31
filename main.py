@@ -26,10 +26,8 @@ BUNDLE_PRICE_CENTS = 3000    # $30.00
 
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 SELLAPP_API_KEY = os.environ.get("SELLAPP_API_KEY")
-# NOTE: despite the name, this must be your storefront's URL SLUG (e.g. if
-# your store is at "myshop.sell.app", this is "myshop"), NOT a numeric ID -
-# Sell.app's API selects the store via the X-STORE request header using
-# this slug, per their official docs (developer.sell.app/authentication).
+# The numeric store ID sent in the product-creation body - see the note in
+# create_sellapp_product() about the working v2 endpoint/format.
 SELLAPP_STORE_ID = os.environ.get("SELLAPP_STORE_ID")
 
 # Used to pull today's real trending YouTube topics instead of cycling a
@@ -614,26 +612,23 @@ def post_to_buffer_pinterest(image_url, title, description, link, category_id=No
 def create_sellapp_product(title, description):
     """STEP A: Create base product.
 
-    Uses /api/v1/ (confirmed via official Sell.app docs at
-    developer.sell.app/authentication - v2 doesn't exist / isn't
-    authenticated the same way, which was the actual cause of the
-    "401 Unauthenticated" errors). Store selection is done via the
-    X-STORE header (the storefront's slug, e.g. "myshop" for
-    myshop.sell.app), NOT a store_id field in the JSON body - also per
-    the official docs example.
+    Uses /api/v2/products - confirmed via this store's own prior successful
+    API usage (product creation worked fine on v2 previously; a later
+    switch to v1 + X-STORE header was a mistake and made things worse -
+    404 instead of 401). The real, still-unresolved cause of the 401
+    errors is almost certainly the SELLAPP_API_KEY value itself (invalid,
+    expired, or wrong permissions), not the URL/routing.
     """
-    url = "https://sell.app/api/v1/products"
+    url = "https://sell.app/api/v2/products"
     # Defensive: strip whitespace/newlines from the API key - the same class
     # of copy-paste bug that already caused problems with ASSET_TOKEN.
     api_key = (SELLAPP_API_KEY or "").strip()
-    store_slug = (SELLAPP_STORE_ID or "").strip()
     headers = {
         "Authorization": f"Bearer {api_key}",
-        "X-STORE": store_slug,
         "Content-Type": "application/json",
-        "Accept": "application/json",
     }
     payload = {
+        "store_id": SELLAPP_STORE_ID,
         "title": title,
         "description": description,
         "visibility": "PUBLIC",
@@ -669,12 +664,10 @@ def create_sellapp_variant(product_id, price_cents, image_url):
         buyer after purchase - this is where the public download link for
         the thumbnail goes
     """
-    url = f"https://sell.app/api/v1/products/{product_id}/variants"
+    url = f"https://sell.app/api/v2/products/{product_id}/variants"
     api_key = (SELLAPP_API_KEY or "").strip()
-    store_slug = (SELLAPP_STORE_ID or "").strip()
     headers = {
         "Authorization": f"Bearer {api_key}",
-        "X-STORE": store_slug,
         "Content-Type": "application/json",
         "Accept": "application/json"
     }
