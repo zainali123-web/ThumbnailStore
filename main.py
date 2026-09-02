@@ -44,13 +44,16 @@ TRENDING_CATEGORY_IDS = ["26", "28", "22", "24"]  # Howto&Style, Science&Tech, P
 # Dropped: 27 (Education) - 404s for this chart/region combo.
 ACCENT_COLORS = ["#3355AA", "#D8362A", "#1E9E62", "#8B3FD1"]  # rotates daily
 
-# Used to host generated thumbnails at a public URL so Sell.app's "Manual"
-# deliverable (a link/comment shown to the buyer) can point somewhere real.
-# ThumbnailStore itself is private, so images are pushed to a SEPARATE
-# public repo instead - see the setup notes above create_sellapp_variant().
-ASSET_TOKEN = os.environ.get("ASSET_TOKEN")
-ASSET_REPO = os.environ.get("ASSET_REPO")     # e.g. "zainali123-web/thumbnail-assets"
-ASSET_BRANCH = os.environ.get("ASSET_BRANCH", "main")
+# Used to host generated thumbnails at a public, instantly-available URL so
+# Sell.app's "Manual" deliverable and Pinterest can both point somewhere
+# real. Uses Cloudinary (a purpose-built image CDN) - switched from a
+# GitHub-repo + jsdelivr approach after persistent "Source URL" Pinterest
+# publish failures that survived verification-waits and even a 10-minute
+# scheduling delay. Cloudinary's whole product is "upload -> instantly
+# available worldwide", so there's no propagation race to work around.
+CLOUDINARY_CLOUD_NAME = os.environ.get("CLOUDINARY_CLOUD_NAME")
+CLOUDINARY_API_KEY = os.environ.get("CLOUDINARY_API_KEY")
+CLOUDINARY_API_SECRET = os.environ.get("CLOUDINARY_API_SECRET")
 
 # Used to auto-post each new thumbnail to Pinterest via Buffer, and to link
 # each pin back to the actual Sell.app product page.
@@ -268,122 +271,72 @@ def create_thumbnail(background_path, headline, accent_hex, output_path):
 
 def upload_image_publicly(image_path):
     """
-    Uploads the generated thumbnail to a separate PUBLIC GitHub repo via
-    GitHub's own Contents API, and returns a public jsdelivr CDN URL for it
-    (not raw.githubusercontent.com - see note below). ThumbnailStore itself
-    stays private; only images go to the public repo, one file per
-    thumbnail.
+    Uploads the generated image to Cloudinary and returns its public
+    "secure_url" - which is instantly and reliably fetchable worldwide,
+    immediately after upload.
 
-    NOTE on jsdelivr vs raw.githubusercontent.com: raw.githubusercontent.com
-    is NOT reliable for third-party services (like Pinterest/Buffer) to
-    fetch from - it can take anywhere from a few seconds to ~1 minute to
-    propagate a brand-new file across GitHub's CDN, and content-type
-    headers are inconsistent. jsdelivr's GitHub mirror (cdn.jsdelivr.net/gh/)
-    is built specifically for hot-linking and is what we use instead.
+    Switched from a GitHub-repo + jsdelivr approach after persistent
+    "Source URL" Pinterest publish failures that survived a live-URL
+    verification check AND a 45-second delay AND a 10-minute custom
+    scheduling delay - jsdelivr is a code/package CDN being repurposed for
+    images, and apparently doesn't propagate reliably enough for Pinterest's
+    own crawler. Cloudinary's whole product is "upload -> instantly
+    available worldwide", so there's no propagation race to work around.
 
     One-time setup needed (not per-run - do this once):
-      1. Create a new PUBLIC repo, e.g. "thumbnail-assets", under the same
-         GitHub account/org.
-      2. Create a GitHub Personal Access Token with write access to just
-         that repo (Settings -> Developer settings -> Fine-grained tokens ->
-         Repository access: only "thumbnail-assets" -> Permissions:
-         Contents: Read and write).
+      1. Sign up free at https://cloudinary.com (no card needed).
+      2. On your Cloudinary dashboard home page, copy: Cloud name, API Key,
+         API Secret.
       3. In the ThumbnailStore repo -> Settings -> Secrets and variables ->
          Actions, add:
-           - ASSET_TOKEN = the token from step 2
-           - ASSET_REPO  = "yourusername/thumbnail-assets"
+           - CLOUDINARY_CLOUD_NAME
+           - CLOUDINARY_API_KEY
+           - CLOUDINARY_API_SECRET
       4. In the workflow YAML (the step that runs `python main.py`), add
-         these two as extra env vars alongside the existing ones:
-           ASSET_TOKEN: ${{ secrets.ASSET_TOKEN }}
-           ASSET_REPO: ${{ secrets.ASSET_REPO }}
+         these three as extra env vars alongside the existing ones:
+           CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+           CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+           CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+      5. The old ASSET_TOKEN / ASSET_REPO secrets and the separate
+         "thumbnail-assets" public repo are no longer needed and can be
+         deleted.
     After that, every run uploads and links automatically - no manual step.
     """
-    import base64
+    import hashlib
 
-    if not ASSET_TOKEN or not ASSET_REPO:
+    if not all([CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET]):
         raise Exception(
-            "ASSET_TOKEN / ASSET_REPO not set - see the "
-            "one-time setup notes in upload_image_publicly()'s docstring."
+            "CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET "
+            "not set - see the one-time setup notes in upload_image_publicly()'s "
+            "docstring."
         )
 
-    # Defensive: strip accidental whitespace/newlines that can sneak in when
-    # copy-pasting secret values - a stray newline in a token or repo name is
-    # a common, hard-to-spot cause of 404s from the GitHub API.
-    asset_token = ASSET_TOKEN.strip()
-    asset_repo = ASSET_REPO.strip()
-    asset_branch = ASSET_BRANCH.strip()
+    # Defensive: strip whitespace/newlines from copy-pasted secret values -
+    # this exact class of bug already bit us with ASSET_TOKEN/ASSET_REPO.
+    cloud_name = CLOUDINARY_CLOUD_NAME.strip()
+    api_key = CLOUDINARY_API_KEY.strip()
+    api_secret = CLOUDINARY_API_SECRET.strip()
 
-    filename = os.path.basename(image_path)
-    unique_prefix = str(int(time.time() * 1000))
-    repo_path = f"images/{unique_prefix}_{filename}"
+    # Signed upload: sign every param except file/cloud_name/resource_type/
+    # api_key, sorted alphabetically, hashed with the secret appended -
+    # exactly per Cloudinary's documented signature scheme. Only "timestamp"
+    # is sent here, so signing is simple.
+    timestamp = str(int(time.time()))
+    to_sign = f"timestamp={timestamp}{api_secret}"
+    signature = hashlib.sha1(to_sign.encode("utf-8")).hexdigest()
 
+    url = f"https://api.cloudinary.com/v1_1/{cloud_name}/image/upload"
     with open(image_path, "rb") as f:
-        content_b64 = base64.b64encode(f.read()).decode("utf-8")
+        files = {"file": f}
+        data = {"timestamp": timestamp, "api_key": api_key, "signature": signature}
+        response = requests.post(url, files=files, data=data, timeout=30)
 
-    api_url = f"https://api.github.com/repos/{asset_repo}/contents/{repo_path}"
-    headers = {
-        "Authorization": f"Bearer {asset_token}",
-        "Accept": "application/vnd.github+json",
-    }
-    payload = {
-        "message": f"Add thumbnail {filename}",
-        "content": content_b64,
-        "branch": asset_branch,
-    }
+    if response.status_code != 200:
+        raise Exception(f"Cloudinary upload failed: {response.status_code} {response.text}")
 
-    response = requests.put(api_url, headers=headers, json=payload)
-    if response.status_code not in (200, 201):
-        raise Exception(f"Public asset upload failed: {response.status_code} {response.text}")
-
-    commit_sha = response.json().get("commit", {}).get("sha", asset_branch)
-    # Pin to the exact commit SHA (not the branch name) - jsdelivr caches
-    # branch-based URLs aggressively and can keep serving 404/stale content
-    # for a brand-new file; a SHA-pinned URL is always correct on first
-    # fetch since that exact SHA+path combination has never been requested
-    # (and therefore never cached) before.
-    jsdelivr_url = f"https://cdn.jsdelivr.net/gh/{asset_repo}@{commit_sha}/{repo_path}"
-
-    _wait_until_url_is_live(jsdelivr_url)
-    # Extra safety margin: our own check only confirms the file is live at
-    # the jsdelivr edge node THAT REQUEST happened to hit - Pinterest's own
-    # fetch (which happens separately, at actual publish time, possibly
-    # from a completely different geographic region) can land on a
-    # different edge node that hasn't cached it yet. Bumped from 15s to 45s
-    # after seeing the "Source URL" publish failure recur even with the
-    # shorter delay - gives jsdelivr's network more time to propagate
-    # globally before we hand the URL off to Buffer/Pinterest.
-    time.sleep(45)
-
-    print(f"Image uploaded publicly: {jsdelivr_url}")
-    return jsdelivr_url
-
-
-def _wait_until_url_is_live(url, attempts=8, delay_seconds=4):
-    """
-    Polls a freshly-uploaded asset URL until it actually returns a real
-    image (not a 404/placeholder), so we never hand Buffer/Pinterest a URL
-    that isn't fetchable yet. jsdelivr fetches a file from GitHub on its
-    OWN first request and caches it - so the very first request can still
-    404 while that fetch happens; this loop specifically covers that gap
-    (this was the root cause of the "Pinterest is hitting some snags with
-    the Source URL" publish failures). Doesn't raise on final failure -
-    lets the caller's Pinterest post attempt fail naturally with a clear
-    error message instead of crashing the whole run.
-    """
-    for attempt in range(1, attempts + 1):
-        try:
-            resp = requests.get(url, timeout=15)
-            content_type = resp.headers.get("Content-Type", "")
-            if resp.status_code == 200 and content_type.startswith("image/"):
-                print(f"[debug] Asset URL confirmed live after {attempt} attempt(s).")
-                return True
-            print(f"[debug] Asset not live yet (attempt {attempt}/{attempts}): "
-                  f"status={resp.status_code} content-type={content_type!r}")
-        except requests.RequestException as e:
-            print(f"[debug] Asset check failed (attempt {attempt}/{attempts}): {e}")
-        time.sleep(delay_seconds)
-    print(f"[debug] WARNING: asset URL still not confirmed live after {attempts} attempts: {url}")
-    return False
+    secure_url = response.json()["secure_url"]
+    print(f"Image uploaded to Cloudinary: {secure_url}")
+    return secure_url
 
 
 def smart_title(text):
@@ -537,13 +490,12 @@ def get_product_url(product, slug_fallback=None):
 
 def post_to_buffer_pinterest(image_url, title, description, link, category_id=None):
     """
-    Posts the pin to Pinterest via Buffer's API (createPost mutation).
-    Uses customScheduled with an explicit dueAt ~10 minutes in the future
-    (rather than addToQueue/automatic, which can pick a slot mere seconds
-    away) - this guarantees jsdelivr's CDN has real time to propagate the
-    image globally before Pinterest's own crawler attempts to fetch it at
-    publish time, which is what was causing intermittent "Source URL"
-    publish failures even with an upload-time verification + delay.
+    Posts the pin to Pinterest via Buffer's API (createPost mutation),
+    using addToQueue so it goes out on Buffer's normal posting schedule
+    rather than all at once. (The earlier customScheduled 10-min-delay
+    workaround is no longer needed now that images are hosted on
+    Cloudinary instead of jsdelivr - Cloudinary URLs are reliably fetchable
+    immediately, so there's no propagation gap to wait out.)
     Routes to the board matching category_id if one is configured,
     otherwise falls back to BUFFER_PINTEREST_BOARD_ID.
     """
@@ -560,11 +512,6 @@ def post_to_buffer_pinterest(image_url, title, description, link, category_id=No
     print(f"[debug] using board for category {category_id!r}")
     print(f"[debug] channelId length = {len(channel_id)} (expect 24 for a Buffer channel id)")
     print(f"[debug] boardId length = {len(board_id)}")
-
-    due_at = (datetime.datetime.utcnow() + datetime.timedelta(minutes=10)).strftime(
-        "%Y-%m-%dT%H:%M:%S.000Z"
-    )
-    print(f"[debug] scheduling pin for {due_at} (10 min from now, not immediate)")
 
     query = """
     mutation CreatePin($input: CreatePostInput!) {
@@ -583,8 +530,7 @@ def post_to_buffer_pinterest(image_url, title, description, link, category_id=No
             "text": description,
             "channelId": channel_id,
             "schedulingType": "automatic",
-            "mode": "customScheduled",
-            "dueAt": due_at,
+            "mode": "addToQueue",
             "assets": [{"image": {"url": image_url}}],
             "metadata": {
                 "pinterest": {
