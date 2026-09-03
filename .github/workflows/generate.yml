@@ -27,11 +27,20 @@ jobs:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           SELLAPP_API_KEY: ${{ secrets.SELLAPP_API_KEY }}
           SELLAPP_STORE_ID: ${{ secrets.SELLAPP_STORE_ID }}
-          ASSET_TOKEN: ${{ secrets.ASSET_TOKEN }}
-          ASSET_REPO: ${{ secrets.ASSET_REPO }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
           BUFFER_API_KEY: ${{ secrets.BUFFER_API_KEY }}
           BUFFER_PINTEREST_CHANNEL_ID: ${{ secrets.BUFFER_PINTEREST_CHANNEL_ID }}
           BUFFER_PINTEREST_BOARD_ID: ${{ secrets.BUFFER_PINTEREST_BOARD_ID }}
+          BUFFER_BOARD_HOWTO_1: ${{ secrets.BUFFER_BOARD_HOWTO_1 }}
+          BUFFER_BOARD_HOWTO_2: ${{ secrets.BUFFER_BOARD_HOWTO_2 }}
+          BUFFER_BOARD_TECH_1: ${{ secrets.BUFFER_BOARD_TECH_1 }}
+          BUFFER_BOARD_TECH_2: ${{ secrets.BUFFER_BOARD_TECH_2 }}
+          BUFFER_BOARD_PEOPLE_1: ${{ secrets.BUFFER_BOARD_PEOPLE_1 }}
+          BUFFER_BOARD_PEOPLE_2: ${{ secrets.BUFFER_BOARD_PEOPLE_2 }}
+          BUFFER_BOARD_ENTERTAINMENT_1: ${{ secrets.BUFFER_BOARD_ENTERTAINMENT_1 }}
+          BUFFER_BOARD_ENTERTAINMENT_2: ${{ secrets.BUFFER_BOARD_ENTERTAINMENT_2 }}
           STORE_DOMAIN: ${{ secrets.STORE_DOMAIN }}
         run: python main.py
       - name: Commit updated tracking files
